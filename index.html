@@ -1,19 +1,9 @@
-<!--
-Turn with left/right instead of A/D
-Only allow forward movement (press a button or always moving forward)
-teleport to other cities
-only render building / ground data that is very close
-Spin up some other tokens 
-Check usage limits
-Make forward moevment faster (allow walk or sprint or fly speeds)
--->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Character in Cesium City - Follow Camera with Jumping</title>
+    <title>Three.js Character in Cesium City - Follow Camera with Jumping and City Selection</title>
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -38,6 +28,12 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
             padding: 10px 15px; border-radius: 5px; font-size: 12px;
             z-index: 10; pointer-events: none;
         }
+        #citySelector {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(40, 40, 40, 0.8); color: white;
+            padding: 5px; border-radius: 5px; font-size: 14px;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -45,6 +41,18 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
     <div id="threeContainer">
         <canvas id="threeCanvas"></canvas>
     </div>
+    <select id="citySelector">
+        <option value="nyc">New York City</option>
+        <option value="london">London</option>
+        <option value="tokyo">Tokyo</option>
+        <option value="paris">Paris</option>
+        <option value="sydney">Sydney</option>
+        <option value="montreal">Montreal</option>
+        <option value="toronto">Toronto</option>
+        <option value="istanbul">Istanbul</option>
+        <option value="hanoi">Hanoi</option>
+        <option value="hongkong">Hong Kong</option>
+    </select>
     <div id="instructions">
         W/S: Move Forward/Backward<br>
         A/D: Turn Player<br>
@@ -56,19 +64,33 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
     <script>
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
 
-        const playerMoveSpeed = 20.0;
+        const playerMoveSpeed = 60.0;
         const turnSpeed = 4.0;
         const cameraFollowSpeed = 5.0;
         const cameraDistance = 5.0;
-        const jumpVelocity = 100.0;    // Initial upward velocity when jumping
-        const gravity = -50.0;        // Gravity acceleration (negative to pull down)
-        const groundHeight = 20.0;    // Ground level height
+        const jumpVelocity = 100;
+        const gravity = -50.0;
+        const groundHeight = 20.0;
 
-        let playerPosition = Cesium.Cartographic.fromDegrees(-73.9854, 40.7580, groundHeight);
+        // City coordinates (longitude, latitude)
+        const cities = {
+            nyc: { longitude: -73.9854, latitude: 40.7580 },
+            london: { longitude: -0.1276, latitude: 51.5074 },
+            tokyo: { longitude: 139.6917, latitude: 35.6895 },
+            paris: { longitude: 2.3522, latitude: 48.8566 },
+            sydney: { longitude: 151.2093, latitude: -33.8688 },
+            montreal: { longitude: -73.5674, latitude: 45.5019 },
+            toronto: { longitude: -79.3832, latitude: 43.6532 },
+            istanbul: { longitude: 28.9784, latitude: 41.0082 },
+            hanoi: { longitude: 105.8342, latitude: 21.0278 },
+            hongkong: { longitude: 114.1694, latitude: 22.3193 }
+        };
+
+        let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight);
         let playerHeading = Cesium.Math.toRadians(0.0);
         let cameraHeading = Cesium.Math.toRadians(0.0);
         let cameraPitch = Cesium.Math.toRadians(-15.0);
-        let verticalVelocity = 0.0;   // Tracks player's vertical speed
+        let verticalVelocity = 0.0;
 
         const inputState = {
             forward: false, backward: false, turnLeft: false, turnRight: false,
@@ -76,6 +98,7 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
         };
 
         const instructionsElement = document.getElementById('instructions');
+        const citySelector = document.getElementById('citySelector');
 
         // Cesium Setup
         const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -146,7 +169,7 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
                     case 'D': inputState.turnRight = true; break;
                     case 'ARROWUP': inputState.lookUp = true; break;
                     case 'ARROWDOWN': inputState.lookDown = true; break;
-                    case ' ': inputState.jump = true; break; // Space key
+                    case ' ': inputState.jump = true; break;
                 }
             });
             document.addEventListener('keyup', (event) => {
@@ -160,6 +183,16 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
                     case 'ARROWDOWN': inputState.lookDown = false; break;
                     case ' ': inputState.jump = false; break;
                 }
+            });
+
+            // City selection handler
+            citySelector.addEventListener('change', (event) => {
+                const selectedCity = event.target.value;
+                const cityCoords = cities[selectedCity];
+                playerPosition = Cesium.Cartographic.fromDegrees(cityCoords.longitude, cityCoords.latitude, groundHeight);
+                verticalVelocity = 0; // Reset velocity to prevent falling after teleport
+                playerHeading = Cesium.Math.toRadians(0.0); // Reset heading
+                cameraHeading = Cesium.Math.toRadians(0.0); // Sync camera heading
             });
         }
 
@@ -202,14 +235,14 @@ Make forward moevment faster (allow walk or sprint or fly speeds)
 
             // 4. Handle Jumping and Gravity
             if (inputState.jump) {
-                verticalVelocity = jumpVelocity; // Apply jump velocity
-                inputState.jump = false; // Reset jump input to allow repeated jumps
+                verticalVelocity = jumpVelocity;
+                inputState.jump = false;
             }
-            verticalVelocity += gravity * deltaTime; // Apply gravity
-            playerPosition.height += verticalVelocity * deltaTime; // Update height
+            verticalVelocity += gravity * deltaTime;
+            playerPosition.height += verticalVelocity * deltaTime;
             if (playerPosition.height < groundHeight) {
-                playerPosition.height = groundHeight; // Clamp to ground
-                verticalVelocity = 0; // Reset velocity when on ground
+                playerPosition.height = groundHeight;
+                verticalVelocity = 0;
             }
 
             // 5. Update Player Position (W/S) based on cameraHeading
