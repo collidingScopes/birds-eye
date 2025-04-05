@@ -47,14 +47,14 @@
         // --- Configuration ---
         Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4'; // YOUR TOKEN HERE
 
-        const playerMoveSpeed = 50.0; // Faster speed
-        const cameraRotateSpeed = 0.1;
+        const playerMoveSpeed = 20.0; // Faster speed
+        const cameraRotateSpeed = 4;
 
         // --- State Variables ---
         let playerPosition = Cesium.Cartographic.fromDegrees(-73.9854, 40.7580, 20.0); // Ground level NYC
-        let heading = Cesium.Math.toRadians(90.0); // Single variable for both camera and player facing direction
+        let heading = Cesium.Math.toRadians(0.0); // Single variable for both camera and player facing direction
         let cameraPitch = Cesium.Math.toRadians(-15.0);
-        const cameraDistance = 1200.0;
+        const cameraDistance = 0.0;
 
         const inputState = {
             forward: false, backward: false, left: false, right: false,
