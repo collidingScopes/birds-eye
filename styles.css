@@ -1,0 +1,88 @@
+body, html {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+}
+#cesiumContainer {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+}
+#menu {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 999;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 5px;
+}
+#citySelector {
+    margin-bottom: 10px;
+    padding: 5px;
+}
+#teleportBtn {
+    padding: 5px 10px;
+    cursor: pointer;
+}
+#instructions {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    z-index: 999;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 5px;
+    max-width: 300px;
+}
+#minimap {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 200px;
+    height: 200px;
+    border-radius: 100px;
+    border: 3px solid #fff;
+    overflow: hidden;
+    z-index: 999;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+#minimapCanvas {
+    width: 100%;
+    height: 100%;
+}
+#playerMarker {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: red;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+}
+#loadingOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    color: white;
+    font-size: 24px;
+}
+#characterContainer {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99;
+    pointer-events: none;
+    display: none;
+}

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Character in Cesium City - Faster Movement (Fixed)</title>
+    <!-- Include CesiumJS library -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <!-- Include Three.js library (r128) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        html, body {
+            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif;
+            background: #000;
+        }
+        #cesiumContainer {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 0;
+        }
+         #threeContainer {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
+            pointer-events: none;
+        }
+        #threeCanvas {
+             width: 100%; height: 100%; display: block;
+        }
+        #instructions {
+            position: absolute; bottom: 10px; left: 10px;
+            background: rgba(40, 40, 40, 0.8); color: white;
+            padding: 10px 15px; border-radius: 5px; font-size: 12px;
+            z-index: 10; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="threeContainer">
+        <canvas id="threeCanvas"></canvas>
+    </div>
+    <div id="instructions">
+        W/A/S/D: Move Player<br>
+        Arrow Keys: Rotate Camera<br>
+        Loading City Data...
+    </div>
+
+    <script>
+        // --- Configuration ---
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4'; // YOUR TOKEN HERE
+
+        const playerMoveSpeed = 50.0; // Faster speed
+        const cameraRotateSpeed = 0.1;
+
+        // --- State Variables ---
+        let playerPosition = Cesium.Cartographic.fromDegrees(-73.9854, 40.7580, 20.0); // Ground level NYC
+        let heading = Cesium.Math.toRadians(90.0); // Single variable for both camera and player facing direction
+        let cameraPitch = Cesium.Math.toRadians(-15.0);
+        const cameraDistance = 1200.0;
+
+        const inputState = {
+            forward: false, backward: false, left: false, right: false,
+            lookLeft: false, lookRight: false, lookUp: false, lookDown: false,
+        };
+
+        const instructionsElement = document.getElementById('instructions');
+
+        // --- Cesium Setup ---
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            animation: false, baseLayerPicker: false, fullscreenButton: false, geocoder: false,
+            homeButton: false, infoBox: false, sceneModePicker: false, selectionIndicator: false,
+            timeline: false, navigationHelpButton: false, scene3DOnly: true,
+            useDefaultRenderLoop: false,
+            maximumScreenSpaceError: 4,
+        });
+
+        viewer.scene.screenSpaceCameraController.enableRotate = false;
+        viewer.scene.screenSpaceCameraController.enableTranslate = false;
+        viewer.scene.screenSpaceCameraController.enableZoom = false;
+        viewer.scene.screenSpaceCameraController.enableTilt = false;
+        viewer.scene.screenSpaceCameraController.enableLook = false;
+
+        const cesiumCamera = viewer.camera;
+
+        // --- Load Cesium OSM Buildings ---
+        let osmBuildingsTileset = null;
+        async function loadOsmBuildings() {
+            try {
+                osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188);
+                viewer.scene.primitives.add(osmBuildingsTileset);
+                osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({
+                    color: "color('#e0e0e0')"
+                });
+                console.log("Cesium OSM Buildings loaded and styled.");
+                instructionsElement.innerHTML = "W/A/S/D: Move Player<br>Arrow Keys: Rotate Camera<br>Facing: East";
+            } catch (error) {
+                console.error(`Error loading Cesium OSM Buildings: ${error}`);
+                instructionsElement.innerHTML = "Error loading city data.<br>Check console.";
+                instructionsElement.style.color = 'red';
+            }
+        }
+
+        // --- Three.js Setup ---
+        const three = { scene: null, camera: null, renderer: null, playerMesh: null };
+        function initThree() {
+            const scene = new THREE.Scene(); const canvas = document.getElementById('threeCanvas');
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 0);
+            three.camera = camera; const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.autoClear = false; three.renderer = renderer;
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); directionalLight.position.set(0, 10, 5); scene.add(directionalLight);
+            const radius = 0.3; const height = 1.0; const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff8800 }); const playerMesh = new THREE.Mesh(cylinder, material);
+            playerMesh.position.set(0, -1.2, -3.0); camera.add(playerMesh); scene.add(camera);
+            three.scene = scene; three.playerMesh = playerMesh;
+        }
+
+        // --- Input Handling ---
+        function setupInputListeners() {
+            document.addEventListener('keydown', (event) => {
+                const key = event.key.toUpperCase();
+                switch (key) {
+                    case 'W': inputState.forward = true; break; case 'S': inputState.backward = true; break;
+                    case 'A': inputState.left = true; break; case 'D': inputState.right = true; break;
+                    case 'ARROWLEFT': inputState.lookLeft = true; break; case 'ARROWRIGHT': inputState.lookRight = true; break;
+                    case 'ARROWUP': inputState.lookUp = true; break; case 'ARROWDOWN': inputState.lookDown = true; break;
+                }
+            });
+            document.addEventListener('keyup', (event) => {
+                const key = event.key.toUpperCase();
+                switch (key) {
+                    case 'W': inputState.forward = false; break; case 'S': inputState.backward = false; break;
+                    case 'A': inputState.left = false; break; case 'D': inputState.right = false; break;
+                    case 'ARROWLEFT': inputState.lookLeft = false; break; case 'ARROWRIGHT': inputState.lookRight = false; break;
+                    case 'ARROWUP': inputState.lookUp = false; break; case 'ARROWDOWN': inputState.lookDown = false; break;
+                }
+            });
+        }
+
+        // --- Helper Function to Convert Heading to Direction ---
+        function getDirection(heading) {
+            let degrees = Cesium.Math.toDegrees(heading) % 360;
+            if (degrees < 0) degrees += 360;
+
+            if (degrees >= 337.5 || degrees < 22.5) return "North";
+            if (degrees >= 22.5 && degrees < 67.5) return "Northeast";
+            if (degrees >= 67.5 && degrees < 112.5) return "East";
+            if (degrees >= 112.5 && degrees < 157.5) return "Southeast";
+            if (degrees >= 157.5 && degrees < 202.5) return "South";
+            if (degrees >= 202.5 && degrees < 247.5) return "Southwest";
+            if (degrees >= 247.5 && degrees < 292.5) return "West";
+            if (degrees >= 292.5 && degrees < 337.5) return "Northwest";
+            return "Unknown"; // Fallback
+        }
+
+        // --- Update Logic ---
+        let lastTime = 0;
+        function update(currentTime) {
+            const deltaTime = (currentTime - (lastTime || currentTime)) / 1000.0;
+            lastTime = currentTime;
+
+            // --- 1. Update Heading and Pitch (Arrow Keys) ---
+            let deltaHeading = 0; let deltaPitch = 0;
+            if (inputState.lookLeft) deltaHeading -= cameraRotateSpeed * deltaTime;
+            if (inputState.lookRight) deltaHeading += cameraRotateSpeed * deltaTime;
+            if (inputState.lookUp) deltaPitch += cameraRotateSpeed * deltaTime;
+            if (inputState.lookDown) deltaPitch -= cameraRotateSpeed * deltaTime;
+            
+            heading += deltaHeading; // Single heading for both camera and player
+            cameraPitch += deltaPitch;
+            cameraPitch = Cesium.Math.clamp(cameraPitch, -Cesium.Math.PI_OVER_TWO + 0.05, Cesium.Math.toRadians(20));
+
+            // --- 2. Update Player Position (WASD) ---
+            let moveDirection = new Cesium.Cartesian3();
+            let moveAmount = playerMoveSpeed * deltaTime;
+
+            // Handle forward movement (W) in the direction of heading
+            if (inputState.forward) {
+                moveDirection.x = Math.cos(heading);
+                moveDirection.y = Math.sin(heading);
+                Cesium.Cartesian3.normalize(moveDirection, moveDirection);
+                Cesium.Cartesian3.multiplyByScalar(moveDirection, moveAmount, moveDirection);
+            }
+            
+            // Handle backward movement (S) opposite to heading
+            if (inputState.backward) {
+                moveDirection.x = -Math.cos(heading);
+                moveDirection.y = -Math.sin(heading);
+                Cesium.Cartesian3.normalize(moveDirection, moveDirection);
+                Cesium.Cartesian3.multiplyByScalar(moveDirection, moveAmount, moveDirection);
+            }
+            
+            // Handle strafing left (A) perpendicular to heading
+            if (inputState.left) {
+                moveDirection.x = Math.cos(heading + Cesium.Math.PI_OVER_TWO);
+                moveDirection.y = Math.sin(heading + Cesium.Math.PI_OVER_TWO);
+                Cesium.Cartesian3.normalize(moveDirection, moveDirection);
+                Cesium.Cartesian3.multiplyByScalar(moveDirection, moveAmount, moveDirection);
+            }
+            
+            // Handle strafing right (D) perpendicular to heading
+            if (inputState.right) {
+                moveDirection.x = Math.cos(heading - Cesium.Math.PI_OVER_TWO);
+                moveDirection.y = Math.sin(heading - Cesium.Math.PI_OVER_TWO);
+                Cesium.Cartesian3.normalize(moveDirection, moveDirection);
+                Cesium.Cartesian3.multiplyByScalar(moveDirection, moveAmount, moveDirection);
+            }
+
+            // Apply movement if there's any
+            if (!Cesium.Cartesian3.equals(moveDirection, Cesium.Cartesian3.ZERO)) {
+                const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
+                const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
+                const moveECEF = Cesium.Matrix4.multiplyByPointAsVector(enuTransform, moveDirection, new Cesium.Cartesian3());
+                const newWorldPos = Cesium.Cartesian3.add(playerWorldPos, moveECEF, new Cesium.Cartesian3());
+                const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
+                playerPosition.longitude = newCartographic.longitude;
+                playerPosition.latitude = newCartographic.latitude;
+            }
+
+            // --- 3. Set Cesium Camera View ---
+            const targetWorldPosition = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
+            cesiumCamera.setView({
+                destination: targetWorldPosition,
+                orientation: { heading: heading, pitch: cameraPitch, roll: 0.0 }
+            });
+            cesiumCamera.moveBackward(cameraDistance);
+
+            // --- 4. Synchronize Three.js Camera ---
+            three.renderer.clear();
+            three.camera.projectionMatrix.fromArray(cesiumCamera.frustum.projectionMatrix);
+            three.camera.matrixWorldInverse.fromArray(cesiumCamera.viewMatrix);
+            three.camera.matrixWorld.copy(three.camera.matrixWorldInverse).invert();
+
+            // --- 5. Render Both Scenes ---
+            viewer.render();
+            three.renderer.render(three.scene, three.camera);
+
+            // --- 6. Update Instructions with Player Direction ---
+            instructionsElement.innerHTML = `W/A/S/D: Move Player<br>Arrow Keys: Rotate Camera<br>Facing: ${getDirection(heading)}`;
+
+            // --- 7. Request Next Frame ---
+            requestAnimationFrame(update);
+        }
+
+        // --- Initialization ---
+        initThree();
+        setupInputListeners();
+        loadOsmBuildings();
+
+        // Set initial Cesium camera view
+        const initialTargetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
+        cesiumCamera.setView({
+            destination: initialTargetWorldPos,
+            orientation: { heading: heading, pitch: cameraPitch, roll: 0.0 }
+        });
+        cesiumCamera.moveBackward(cameraDistance);
+
+        // Start the custom render loop
+        requestAnimationFrame(update);
+
+        // Handle window resizing
+        window.addEventListener('resize', () => {
+            const width = window.innerWidth; const height = window.innerHeight;
+            three.renderer.setSize(width, height);
+            three.camera.aspect = width / height; three.camera.updateProjectionMatrix();
+        });
+
+    </script>
+</body>
+</html>
