@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Character in Cesium City - Follow Camera</title>
+    <title>Three.js Character in Cesium City - Follow Camera with Jumping</title>
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.118/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -39,6 +39,7 @@
         W/S: Move Forward/Backward<br>
         A/D: Turn Player<br>
         Up/Down Arrows: Look Up/Down<br>
+        Space: Jump<br>
         Loading City Data...
     </div>
 
@@ -49,15 +50,19 @@
         const turnSpeed = 4.0;
         const cameraFollowSpeed = 5.0;
         const cameraDistance = 5.0;
+        const jumpVelocity = 100.0;    // Initial upward velocity when jumping
+        const gravity = -50.0;        // Gravity acceleration (negative to pull down)
+        const groundHeight = 20.0;    // Ground level height
 
-        let playerPosition = Cesium.Cartographic.fromDegrees(-73.9854, 40.7580, 20.0);
+        let playerPosition = Cesium.Cartographic.fromDegrees(-73.9854, 40.7580, groundHeight);
         let playerHeading = Cesium.Math.toRadians(0.0);
         let cameraHeading = Cesium.Math.toRadians(0.0);
         let cameraPitch = Cesium.Math.toRadians(-15.0);
+        let verticalVelocity = 0.0;   // Tracks player's vertical speed
 
         const inputState = {
             forward: false, backward: false, turnLeft: false, turnRight: false,
-            lookUp: false, lookDown: false
+            lookUp: false, lookDown: false, jump: false
         };
 
         const instructionsElement = document.getElementById('instructions');
@@ -81,7 +86,7 @@
                 osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188);
                 viewer.scene.primitives.add(osmBuildingsTileset);
                 osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e0e0e0')" });
-                instructionsElement.innerHTML = "W/S: Move Forward/Backward<br>A/D: Turn Player<br>Up/Down Arrows: Look Up/Down<br>Facing: East";
+                instructionsElement.innerHTML = "W/S: Move Forward/Backward<br>A/D: Turn Player<br>Up/Down Arrows: Look Up/Down<br>Space: Jump<br>Facing: East";
             } catch (error) {
                 console.error(`Error loading Cesium OSM Buildings: ${error}`);
                 instructionsElement.innerHTML = "Error loading city data.<br>Check console.";
@@ -131,6 +136,7 @@
                     case 'D': inputState.turnRight = true; break;
                     case 'ARROWUP': inputState.lookUp = true; break;
                     case 'ARROWDOWN': inputState.lookDown = true; break;
+                    case ' ': inputState.jump = true; break; // Space key
                 }
             });
             document.addEventListener('keyup', (event) => {
@@ -142,6 +148,7 @@
                     case 'D': inputState.turnRight = false; break;
                     case 'ARROWUP': inputState.lookUp = false; break;
                     case 'ARROWDOWN': inputState.lookDown = false; break;
+                    case ' ': inputState.jump = false; break;
                 }
             });
         }
@@ -183,7 +190,19 @@
             if (inputState.lookDown) cameraPitch -= turnSpeed * deltaTime;
             cameraPitch = Cesium.Math.clamp(cameraPitch, -Cesium.Math.PI_OVER_TWO + 0.05, Cesium.Math.toRadians(20));
 
-            // 4. Update Player Position (W/S) based on cameraHeading
+            // 4. Handle Jumping and Gravity
+            if (inputState.jump) {
+                verticalVelocity = jumpVelocity; // Apply jump velocity
+                inputState.jump = false; // Reset jump input to allow repeated jumps
+            }
+            verticalVelocity += gravity * deltaTime; // Apply gravity
+            playerPosition.height += verticalVelocity * deltaTime; // Update height
+            if (playerPosition.height < groundHeight) {
+                playerPosition.height = groundHeight; // Clamp to ground
+                verticalVelocity = 0; // Reset velocity when on ground
+            }
+
+            // 5. Update Player Position (W/S) based on cameraHeading
             const moveAmount = playerMoveSpeed * deltaTime;
             let moveDirection = new Cesium.Cartesian3(0, 0, 0);
             const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
@@ -203,7 +222,7 @@
                 playerPosition.latitude = newCartographic.latitude;
             }
 
-            // 5. Position Camera Behind Player
+            // 6. Position Camera Behind Player
             const targetWorldPosition = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
             cesiumCamera.setView({
                 destination: targetWorldPosition,
@@ -211,21 +230,21 @@
             });
             cesiumCamera.moveBackward(cameraDistance);
 
-            // 6. Update Player Mesh Orientation
+            // 7. Update Player Mesh Orientation
             three.playerMesh.rotation.y = -playerHeading;
 
-            // 7. Sync Three.js Camera
+            // 8. Sync Three.js Camera
             three.renderer.clear();
             three.camera.projectionMatrix.fromArray(cesiumCamera.frustum.projectionMatrix);
             three.camera.matrixWorldInverse.fromArray(cesiumCamera.viewMatrix);
             three.camera.matrixWorld.copy(three.camera.matrixWorldInverse).invert();
 
-            // 8. Render
+            // 9. Render
             viewer.render();
             three.renderer.render(three.scene, three.camera);
 
-            // 9. Update Instructions
-            instructionsElement.innerHTML = `W/S: Move Forward/Backward<br>A/D: Turn Player<br>Up/Down Arrows: Look Up/Down<br>Facing: ${getDirection(playerHeading)}`;
+            // 10. Update Instructions
+            instructionsElement.innerHTML = `W/S: Move Forward/Backward<br>A/D: Turn Player<br>Up/Down Arrows: Look Up/Down<br>Space: Jump<br>Facing: ${getDirection(playerHeading)}`;
 
             requestAnimationFrame(update);
         }
