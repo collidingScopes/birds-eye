@@ -79,6 +79,12 @@
         const gravity = -50.0;
         const groundHeight = 30.0;
 
+        // Performance optimization settings
+        const visibilityRadius = 100.0; // Meters to render buildings around player (higher value for more visibility)
+        const tilesMaximumScreenSpaceError = 50; // Lower values = more detail (8-16 is a good balance)
+        const enableFrustumCulling = true; // Only render what's in the camera view
+        const enableLOD = true; // Use level of detail based on distance
+
         const cities = {
             nyc: { longitude: -73.9854, latitude: 40.7580 },
             london: { longitude: -0.1276, latitude: 51.5074 },
@@ -126,23 +132,93 @@
             homeButton: false, infoBox: false, sceneModePicker: false, selectionIndicator: false,
             timeline: false, navigationHelpButton: false, scene3DOnly: true,
             useDefaultRenderLoop: false,
-            maximumScreenSpaceError: 4
+            maximumScreenSpaceError: tilesMaximumScreenSpaceError,
+            requestRenderMode: false  // Use continuous rendering to ensure buildings appear
         });
 
         viewer.scene.screenSpaceCameraController.enableInputs = false;
         const cesiumCamera = viewer.camera;
 
+        // Frustum culling implementation
+        const FrustumCuller = {
+            init: function(camera) {
+                this.camera = camera;
+                this.frustum = new Cesium.PerspectiveFrustum();
+                this.frustum.fov = camera.frustum.fov;
+                this.frustum.aspectRatio = camera.frustum.aspectRatio;
+                this.frustum.near = camera.frustum.near;
+                this.frustum.far = camera.frustum.far;
+            },
+
+            update: function() {
+                this.frustum.fov = this.camera.frustum.fov;
+                this.frustum.aspectRatio = this.camera.frustum.aspectRatio;
+                this.frustum.near = this.camera.frustum.near;
+                this.frustum.far = this.camera.frustum.far;
+            }
+        };
+
+        // Initialize the frustum culler
+        if (enableFrustumCulling) {
+            FrustumCuller.init(cesiumCamera);
+        }
+
         let osmBuildingsTileset = null;
         async function loadOsmBuildings() {
             try {
-                osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188);
+                osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188, {
+                    maximumScreenSpaceError: tilesMaximumScreenSpaceError,
+                    maximumMemoryUsage: 2048,   // Allow up to 2GB memory
+                    cullWithChildrenBounds: true,
+                    skipLevelOfDetail: true,
+                    baseScreenSpaceError: 512,  // Lower value for better initial detail
+                    skipScreenSpaceErrorFactor: 8,
+                    skipLevels: 1,
+                    immediatelyLoadDesiredLevelOfDetail: true,
+                    loadSiblings: true,
+                    cullRequestsWhileMoving: false,  // Don't cull while moving to ensure buildings load
+                });
+
                 viewer.scene.primitives.add(osmBuildingsTileset);
                 osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e0e0e0')" });
+                
+                // Set up dynamic LOD and visibility
+                if (enableLOD) {
+                    setupLOD(osmBuildingsTileset);
+                }
+                
                 instructionsElement.innerHTML = "W/S: Move Forward/Backward<br>A/D: Strafe Left/Right<br>Arrow Keys: Move Camera<br>Space: Jump<br>Facing: East";
             } catch (error) {
                 console.error(`Error loading Cesium OSM Buildings: ${error}`);
                 instructionsElement.innerHTML = "Error loading city data.<br>Check console.";
                 instructionsElement.style.color = 'red';
+            }
+        }
+
+        // Set up Level of Detail (LOD) for tileset
+        function setupLOD(tileset) {
+            // Define distance-based LOD settings
+            tileset.maximumScreenSpaceError = tilesMaximumScreenSpaceError;
+            
+            // Custom tileset specific screen space error
+            tileset.dynamicScreenSpaceError = true;
+            tileset.dynamicScreenSpaceErrorDensity = 0.00278;
+            tileset.dynamicScreenSpaceErrorFactor = 4.0;
+        }
+        
+        // Function to update visibility of 3D Tiles based on distance
+        function updateTilesetVisibility(position) {
+            if (!osmBuildingsTileset) return;
+            
+            // Make sure buildings are visible
+            osmBuildingsTileset.show = true;
+            
+            // Set a more generous visibility radius
+            if (visibilityRadius > 0) {
+                osmBuildingsTileset.distanceDisplayCondition = new Cesium.DistanceDisplayCondition(0, visibilityRadius);
+            } else {
+                // If visibility radius is 0 or negative, don't restrict by distance
+                osmBuildingsTileset.distanceDisplayCondition = undefined;
             }
         }
 
@@ -152,7 +228,12 @@
             const canvas = document.getElementById('threeCanvas');
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             three.camera = camera;
-            const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+            const renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas, 
+                alpha: true, 
+                antialias: true,
+                powerPreference: 'high-performance'  // Prefer GPU performance over power saving
+            });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.autoClear = false;
@@ -226,6 +307,9 @@
                 playerHeading = Cesium.Math.toRadians(0.0);
                 cameraHeading = Cesium.Math.toRadians(0.0);
                 updateDirectionVectors();
+
+                // Force immediate update of tile visibility when changing city
+                updateTilesetVisibility(playerPosition);
             });
         }
 
@@ -243,6 +327,11 @@
             return "Unknown";
         }
 
+        // Variables for frame throttling to improve performance
+        let lastRenderTime = 0;
+        const renderInterval = 1000 / 60; // Target 60 FPS
+        let needsRender = true;
+
         let lastTime = 0;
         function update(currentTime) {
             const deltaTime = (currentTime - (lastTime || currentTime)) / 1000.0;
@@ -257,35 +346,59 @@
                 lastFpsUpdate = currentTime;
             }
 
+            // Limit rendering to target framerate to reduce CPU/GPU load when static
+            if (currentTime - lastRenderTime < renderInterval && !needsRender) {
+                requestAnimationFrame(update);
+                return;
+            }
+            lastRenderTime = currentTime;
+            
+            // Reset render flag after rendering
+            needsRender = false;
+
             // 1. Update Camera Heading (Left/Right arrows)
             if (inputState.left) {
                 cameraHeading -= cameraTurnSpeed * deltaTime;
                 playerHeading -= cameraTurnSpeed * deltaTime;
                 updateDirectionVectors();
+                needsRender = true;
             }
             if (inputState.right) {
                 cameraHeading += cameraTurnSpeed * deltaTime;
                 playerHeading += cameraTurnSpeed * deltaTime;
                 updateDirectionVectors();
+                needsRender = true;
             }
             cameraHeading = Cesium.Math.zeroToTwoPi(cameraHeading);
             playerHeading = Cesium.Math.zeroToTwoPi(playerHeading);
 
             // 2. Update Camera Pitch (Up/Down arrows)
-            if (inputState.up) cameraPitch += cameraTurnSpeed * deltaTime;
-            if (inputState.down) cameraPitch -= cameraTurnSpeed * deltaTime;
+            if (inputState.up) {
+                cameraPitch += cameraTurnSpeed * deltaTime;
+                needsRender = true;
+            }
+            if (inputState.down) {
+                cameraPitch -= cameraTurnSpeed * deltaTime;
+                needsRender = true;
+            }
             cameraPitch = Cesium.Math.clamp(cameraPitch, -Cesium.Math.PI_OVER_TWO + 0.05, Cesium.Math.toRadians(groundHeight));
 
             // 3. Handle Jumping and Gravity
             if (inputState.jump) {
                 verticalVelocity = jumpVelocity;
                 inputState.jump = false;
+                needsRender = true;
             }
-            verticalVelocity += gravity * deltaTime;
-            playerPosition.height += verticalVelocity * deltaTime;
-            if (playerPosition.height < groundHeight) {
-                playerPosition.height = groundHeight;
-                verticalVelocity = 0;
+            
+            if (verticalVelocity !== 0 || playerPosition.height > groundHeight) {
+                verticalVelocity += gravity * deltaTime;
+                playerPosition.height += verticalVelocity * deltaTime;
+                needsRender = true;
+                
+                if (playerPosition.height < groundHeight) {
+                    playerPosition.height = groundHeight;
+                    verticalVelocity = 0;
+                }
             }
 
             // 4. Update Player Position (W/S/A/D) using direction vectors
@@ -299,6 +412,7 @@
                 const direction = inputState.forward ? 1 : -1;
                 moveDirection.x += forwardDirection.x * direction;
                 moveDirection.y += forwardDirection.y * direction;
+                needsRender = true;
             }
             
             // Handle strafing (left/right sideways movement)
@@ -306,6 +420,7 @@
                 const direction = inputState.strafeLeft ? -1 : 1;
                 moveDirection.x += rightDirection.x * direction;
                 moveDirection.y += rightDirection.y * direction;
+                needsRender = true;
             }
             
             // Apply movement if any direction keys are pressed
@@ -318,6 +433,17 @@
                 const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
                 playerPosition.longitude = newCartographic.longitude;
                 playerPosition.latitude = newCartographic.latitude;
+            }
+
+            // Only update tileset visibility if we moved enough to matter
+            if (needsRender) {
+                // Update the visibility of 3D tiles based on player position
+                updateTilesetVisibility(playerPosition);
+                
+                // Update frustum culling if enabled
+                if (enableFrustumCulling) {
+                    FrustumCuller.update();
+                }
             }
 
             // 5. Position Camera Behind Player
@@ -367,6 +493,7 @@
             three.renderer.setSize(width, height);
             three.camera.aspect = width / height;
             three.camera.updateProjectionMatrix();
+            needsRender = true; // Force a render after resize
         });
     </script>
 </body>
