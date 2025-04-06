@@ -7,7 +7,7 @@ html, body {
 }
 #threeContainer {
     width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
-    pointer-events: none;
+    pointer-events: none; /* Allow interaction with Cesium */
 }
 #threeCanvas {
     width: 100%; height: 100%; display: block;
@@ -16,13 +16,15 @@ html, body {
     position: absolute; bottom: 10px; left: 10px;
     background: rgba(40, 40, 40, 0.8); color: white;
     padding: 10px 15px; border-radius: 5px; font-size: 12px;
+    line-height: 1.4; /* Improve readability */
     z-index: 10; pointer-events: none;
 }
 #citySelector {
     position: absolute; top: 10px; left: 10px;
-    background: rgba(40, 40, 40, 0.8); color: white;
+    background: rgba(40, 40, 40, 0.8); color: white; border: 1px solid #555;
     padding: 5px; border-radius: 5px; font-size: 14px;
     z-index: 10;
+    cursor: pointer;
 }
 #fpsCounter {
     position: absolute; bottom: 10px; right: 10px;
@@ -36,18 +38,25 @@ html, body {
     position: absolute;
     top: 10px;
     right: 10px;
-    width: 200px;
-    height: 200px;
+    width: 150px; /* Slightly smaller */
+    height: 150px;
     z-index: 5;
     background-color: rgba(0, 0, 0, 0.6);
     border-radius: 50%;
     overflow: hidden;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
     border: 2px solid rgba(255, 255, 255, 0.3);
-    pointer-events: auto; /* Allow clicks on the minimap */
+    pointer-events: none; /* Typically non-interactive */
 }
 
 #minimapCanvas {
     width: 100%;
     height: 100%;
+    display: block; /* Prevent extra space */
+}
+
+/* Style Cesium widgets if needed */
+.cesium-viewer-toolbar {
+    /* Example: Move Cesium toolbar if it conflicts */
+    /* top: 50px; */
 }

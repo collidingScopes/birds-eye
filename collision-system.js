@@ -1,140 +1,160 @@
 // collision-system.js
+// No changes required for the version upgrade, but added robustness.
 
 // Collision detection parameters
 const collisionCheckHeight = 1000.0; // Maximum height ABOVE SURFACE to start the ray
-const minimumBuildingHeightOffset = 5.0; // Minimum height difference above terrain to be considered a building
+const minimumBuildingHeightOffset = 0.5; // Minimum height difference above terrain to be considered a building/obstacle
 
 // Create a collision detection module
 const CollisionSystem = {
-    init: function(scene, tileset, baseGroundHeight) { // Pass baseGroundHeight
+    scene: null,
+    tileset: null,
+    buildingHeightsCache: {}, // Renamed for clarity
+    baseGroundHeight: 0,    // Store base ground height provided during init
+    initialized: false,
+
+    init: function(scene, tileset, baseGroundHeight) {
+        if (!scene || !tileset) {
+            console.error("CollisionSystem init failed: Scene or Tileset missing.");
+            return;
+        }
         this.scene = scene;
         this.tileset = tileset;
-        this.buildingHeights = {};
-        this.baseGroundHeight = baseGroundHeight; // Store base ground height
-        this.pendingChecks = 0; // Track ongoing checks
-        console.log("Collision system initialized");
+        this.baseGroundHeight = baseGroundHeight;
+        this.buildingHeightsCache = {}; // Clear cache on re-init
+        this.initialized = true;
+        console.log("Collision system initialized with base ground height:", baseGroundHeight);
     },
 
-    // Function to get terrain height (more robust than assuming global groundHeight)
+    // Function to get approximate terrain height (simple placeholder)
+    // A proper implementation would use viewer.scene.globe.getHeight or sampleTerrainMostDetailed
     getTerrainHeight: function(cartographic) {
-        // Placeholder: In a real scenario, you might query Cesium terrain provider
-        // For now, we'll assume a base height or use the cached value if available
-        const key = `${cartographic.longitude.toFixed(7)},${cartographic.latitude.toFixed(7)}_terrain`;
-        if (this.buildingHeights[key] !== undefined) {
-            return this.buildingHeights[key];
-        }
-        // Fallback to the configured base ground height
-        this.buildingHeights[key] = this.baseGroundHeight; // Cache base height
+        // For this example, we assume the 'baseGroundHeight' is the terrain height
+        // In a real app, query Cesium's terrain provider here.
+        // Caching a simple base height isn't very useful for actual terrain.
         return this.baseGroundHeight;
     },
 
-    // Function to cast a ray and find height at a specific position
-    castRayAtPosition: function(cartographic, startHeight) {
-        if (!this.tileset || !this.tileset.ready) return this.baseGroundHeight;
-        
+    // Function to cast a ray downwards and find the height of the first hit (tileset or terrain)
+    castRayAtPosition: function(cartographic, startHeightOffset = collisionCheckHeight) {
+        if (!this.initialized || !this.tileset || !this.tileset.ready || !Cesium.defined(cartographic)) {
+            // console.warn("CollisionSystem: Cannot cast ray, not initialized or tileset not ready.");
+            return this.baseGroundHeight; // Fallback
+        }
+
         // --- RAY CASTING ---
-        // 1. Get the point on the ellipsoid (height 0) at the given location
+        // 1. Get the point on the ellipsoid (height 0)
         const pointOnEllipsoid = Cesium.Cartesian3.fromRadians(
             cartographic.longitude,
             cartographic.latitude,
-            0.0 // Use ellipsoid height 0 as reference
+            0.0
         );
 
         // 2. Determine the 'up' direction at that point
         const up = Cesium.Cartesian3.normalize(pointOnEllipsoid, new Cesium.Cartesian3());
 
-        // 3. Calculate the ray start position high above the surface or from specified height
+        // 3. Calculate the ray start position high above the potential surface
         const rayStart = Cesium.Cartesian3.add(
             pointOnEllipsoid,
-            Cesium.Cartesian3.multiplyByScalar(up, startHeight || collisionCheckHeight, new Cesium.Cartesian3()),
+            Cesium.Cartesian3.multiplyByScalar(up, this.getTerrainHeight(cartographic) + startHeightOffset, new Cesium.Cartesian3()), // Start relative to estimated terrain
             new Cesium.Cartesian3()
         );
 
-        // 4. Ray direction is straight down
+        // 4. Ray direction is straight down (-up)
         const rayDirection = Cesium.Cartesian3.negate(up, new Cesium.Cartesian3());
 
         const ray = new Cesium.Ray(rayStart, rayDirection);
 
-        // Pick against the tileset ONLY
-        const result = this.scene.pickFromRay(ray, [this.tileset]);
-        
-        // Get terrain height
-        const terrainHeight = this.getTerrainHeight(cartographic);
-        
-        // Process the result
-        if (result && result.position) {
-            const intersectionCartographic = Cesium.Cartographic.fromCartesian(result.position);
-            const intersectionHeight = intersectionCartographic.height;
+        // Pick against the specific tileset object for buildings
+        // Use scene.drillPick for multiple results if needed
+        const results = this.scene.drillPickFromRay(ray, 10, [this.tileset]); // Limit results, check only tileset
 
-            // Check if the intersection point is significantly higher than the terrain
-            if (intersectionHeight > terrainHeight + minimumBuildingHeightOffset) {
-                return intersectionHeight; // It's a building roof or structure
-            } else {
-                // Intersection is too low, likely ground within the tileset or small object
-                return Math.max(intersectionHeight, terrainHeight);
-            }
+        let highestHitHeight = this.getTerrainHeight(cartographic); // Start with terrain height as minimum
+
+        if (Cesium.defined(results) && results.length > 0) {
+             // Find the highest intersection point from the drill pick results
+             for (let i = 0; i < results.length; i++) {
+                 if(results[i].position) {
+                     const intersectionCartographic = Cesium.Cartographic.fromCartesian(results[i].position);
+                     highestHitHeight = Math.max(highestHitHeight, intersectionCartographic.height);
+                 }
+             }
         }
-        
-        // No intersection, return terrain height
-        return terrainHeight;
+
+        // Consider using scene.pickFromRay if drillPick is slow or overkill
+        // const result = this.scene.pickFromRay(ray, [this.tileset]);
+        // if (Cesium.defined(result) && Cesium.defined(result.position)) {
+        //     const intersectionCartographic = Cesium.Cartographic.fromCartesian(result.position);
+        //     highestHitHeight = Math.max(highestHitHeight, intersectionCartographic.height);
+        // }
+
+
+        // We return the highest point found (could be building or just terrain feature within tileset)
+        return highestHitHeight;
     },
 
-    // Check for building/ground at the current position (regular collision check)
-    checkForBuilding: function(cartographic) {
-        const cacheKey = `${cartographic.longitude.toFixed(7)},${cartographic.latitude.toFixed(7)}_building`;
-        
+    // Check for the surface height (building or ground) at the player's current XY location
+    checkForSurface: function(cartographic) {
+        if (!this.initialized) return this.baseGroundHeight;
+
+        const cacheKey = `${cartographic.longitude.toFixed(6)},${cartographic.latitude.toFixed(6)}`; // Reduced precision slightly
+
         // Check cache first
-        if (this.buildingHeights[cacheKey] !== undefined) {
-            return this.buildingHeights[cacheKey];
+        if (this.buildingHeightsCache[cacheKey] !== undefined) {
+            return this.buildingHeightsCache[cacheKey];
         }
-        
-        // Perform the ray cast
-        const surfaceHeight = this.castRayAtPosition(cartographic);
-        
+
+        // Perform the ray cast from a significant height above
+        const surfaceHeight = this.castRayAtPosition(cartographic, collisionCheckHeight);
+
         // Cache the result
-        this.buildingHeights[cacheKey] = surfaceHeight;
-        
+        this.buildingHeightsCache[cacheKey] = surfaceHeight;
+
         return surfaceHeight;
     },
 
-    // Method to specifically check for roofs between current position and predicted next position
-    checkForRoofsDuringFall: function(cartographic, currentHeight, predictedNextHeight) {
-        // Ignore cache for this type of check
-        // We need a fresh check between current position and next position
-        
-        // Cast a ray from the current height downward
-        const surfaceHeight = this.castRayAtPosition(cartographic, currentHeight);
-        
-        // Check if we found a surface between current and predicted next position
-        if (surfaceHeight < currentHeight && surfaceHeight > predictedNextHeight) {
-            // Surface is between current and next position - we'll hit it this frame
+    // Method to specifically check for roofs between current height and predicted next height when falling
+    checkForRoofsDuringFall: function(cartographic, currentActualHeight, predictedNextHeight) {
+        if (!this.initialized) return null;
+
+        // Cast ray from slightly *above* the current height downwards
+        // This helps catch surfaces the player is about to fall through
+        const checkStartHeight = currentActualHeight + 1.0; // Start check 1m above current pos
+
+        const surfaceHeight = this.castRayAtPosition(cartographic, checkStartHeight - this.getTerrainHeight(cartographic)); // Offset relative to terrain
+
+        // Check if we found a surface that is:
+        // 1. Below our check start height
+        // 2. Above or at the predicted next height after gravity/velocity
+        // 3. Significantly above the base ground (to ensure it's likely a structure)
+        if (surfaceHeight < checkStartHeight &&
+            surfaceHeight >= predictedNextHeight &&
+            surfaceHeight > this.baseGroundHeight + minimumBuildingHeightOffset)
+        {
+            // Found a valid roof/surface intercept during this frame's fall
             return surfaceHeight;
         }
-        
-        // No surface in between - use standard collision at bottom
+
+        // No surface intercepted between current and next position
         return null;
     },
 
-    // Main collision check method, used by the game loop
-    checkCollision: function(playerPosition) {
-        return this.checkForBuilding(playerPosition);
+    // Main collision check method used by the game loop (gets surface height below player)
+    checkCollision: function(playerPositionCartographic) {
+        if (!this.initialized) return this.baseGroundHeight;
+        return this.checkForSurface(playerPositionCartographic);
     },
 
+    // Clear the cache (e.g., when changing cities or periodically)
     clearCache: function() {
-        this.buildingHeights = {};
+        this.buildingHeightsCache = {};
+        // console.log("Collision cache cleared.");
     }
 };
 
-// This function needs to be called from main.js after the tileset is loaded
-function initializeCollisionSystem() {
-    if (osmBuildingsTileset && viewer) {
-        // Pass the base groundHeight during initialization
-        CollisionSystem.init(viewer.scene, osmBuildingsTileset, groundHeight);
-        console.log("Enhanced collision system initialized with roof detection");
-
-        // Clear cache periodically
-        setInterval(() => CollisionSystem.clearCache(), 15000);
-    } else {
-        console.error("Cannot initialize collision system: Tileset or Viewer not ready.");
-    }
-}
+// Example of periodic cache clearing (optional, manage from main.js if preferred)
+// setInterval(() => {
+//     if (CollisionSystem.initialized) {
+//        CollisionSystem.clearCache();
+//     }
+// }, 15000); // Clear every 15 seconds
