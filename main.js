@@ -10,7 +10,7 @@ const cameraTurnSpeed = 2.0;
 const cameraDistance = 20.0;
 const jumpVelocity = 50;
 const gravity = -50.0;
-const groundHeight = 30.0; // Base height when not on a building
+const groundHeight = 10.0; // Base height when not on a building
 
 // Performance Settings
 const tilesMaximumScreenSpaceError = 50;
@@ -152,17 +152,9 @@ async function loadOsmBuildings() {
         viewer.scene.primitives.add(osmBuildingsTileset);
         osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e0e0e0')" });
 
-        // Wait for tileset to be ready before initializing collision system
+        // Wait for tileset to be ready
         await osmBuildingsTileset.readyPromise;
         console.log("OSM Buildings Tileset Ready.");
-
-        // Initialize collision system (Ensure collision-system.js is loaded and CollisionSystem exists)
-        if (typeof CollisionSystem !== 'undefined' && CollisionSystem.init) {
-            CollisionSystem.init(viewer.scene, osmBuildingsTileset, groundHeight);
-            console.log("Collision System Initialized after tileset ready.");
-        } else {
-            console.error("CollisionSystem not defined or init method missing! Check script load order.");
-        }
 
         // Set up dynamic LOD
         if (enableLOD) {
@@ -334,9 +326,8 @@ function setupInputListeners() {
             // Force immediate update of tile visibility might not be needed if relying on Cesium culling
             // updateTilesetVisibility(playerPosition);
 
-            // Reset minimap and clear collision cache
+            // Reset minimap
             miniMap.update(playerPosition, playerHeading);
-            if (CollisionSystem.clearCache) CollisionSystem.clearCache();
 
             // Fly Cesium camera smoothly to the new location
              const targetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height + 500); // Start slightly above
@@ -470,26 +461,6 @@ function update(currentTime) {
     // Clamp pitch to avoid looking too far up or down
     cameraPitch = Cesium.Math.clamp(cameraPitch, Cesium.Math.toRadians(-85.0), Cesium.Math.toRadians(20.0));
 
-    // --- 3. Collision Check at Current Horizontal Position ---
-    let currentSurfaceHeight = groundHeight; // Default to base ground height
-    let onBuilding = false;
-    // Ensure CollisionSystem is initialized and ready
-    if (CollisionSystem.initialized && CollisionSystem.checkCollision) {
-        const surfaceHeight = CollisionSystem.checkCollision(playerPosition);
-        // Use a small tolerance to determine if on a building vs ground noise
-        if (surfaceHeight > groundHeight + 0.2) {
-             currentSurfaceHeight = surfaceHeight;
-             onBuilding = true;
-        } else {
-             // Clamp to groundHeight if very close to it
-             currentSurfaceHeight = Math.max(surfaceHeight, groundHeight);
-        }
-    } else if (!CollisionSystem.initialized && osmBuildingsTileset?.ready) {
-         console.warn("Collision system checkCollision not available or not initialized.");
-         // Fallback or wait for initialization
-    }
-
-
     // --- 4. Handle Jumping and Gravity ---
     //allow infinite jumping
     if (inputState.jump) {
@@ -502,34 +473,16 @@ function update(currentTime) {
     // Apply gravity
     verticalVelocity += gravity * deltaTime;
 
-    // Calculate potential next height based on velocity
-    const potentialNextHeight = playerPosition.height + verticalVelocity * deltaTime;
-
-    // Determine the height the player should land on this frame
-    let landingHeight = currentSurfaceHeight; // By default, land on the surface directly below
-
-    // Check for roofs only when falling downwards and potentially above a building structure
-    if (verticalVelocity < 0 && CollisionSystem.initialized && CollisionSystem.checkForRoofsDuringFall) {
-         const roofInterceptHeight = CollisionSystem.checkForRoofsDuringFall(
-             playerPosition,         // Current lateral position
-             playerPosition.height,  // Starting height for check
-             potentialNextHeight     // Target height after this frame's gravity
-         );
-         // If a valid roof is found between current and next height, use it as landing target
-         if (roofInterceptHeight !== null && roofInterceptHeight >= groundHeight) { // Ensure roof is above ground
-             landingHeight = roofInterceptHeight;
-         }
-    }
-
     // Update player height based on vertical velocity
     playerPosition.height += verticalVelocity * deltaTime;
-    needsRender = true; // Height changed
 
-    // Collision Resolution: Stop falling if hitting or passing through the determined landing surface
-    if (playerPosition.height <= landingHeight) {
-        playerPosition.height = landingHeight; // Snap to the surface
-        verticalVelocity = 0; // Stop falling
+    // Ground collision check - prevent falling below groundHeight
+    if (playerPosition.height < groundHeight) {
+        playerPosition.height = groundHeight;
+        verticalVelocity = 0; // Reset vertical velocity when on ground
     }
+
+    needsRender = true; // Height changed
 
     // --- 5. Update Player Horizontal Position (W/S/A/D for Movement) ---
     const moveAmount = playerMoveSpeed * deltaTime;
@@ -596,31 +549,7 @@ function update(currentTime) {
         // 5. Convert the new ECEF position back to Cartographic (Lat, Lon, Height)
         const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
 
-        // --- Simple Wall/Step Collision Check (Before Applying Move) ---
         let allowMove = true;
-        // Only perform if collision system is ready
-        if (CollisionSystem.initialized && CollisionSystem.checkCollision) {
-             const nextPosSurfaceHeight = CollisionSystem.checkCollision(newCartographic); // Check height at potential new location
-             const heightDifference = nextPosSurfaceHeight - playerPosition.height; // Compare with current player height
-
-             // Define how high the player can "step up" onto obstacles
-             const maxStepHeight = 1.5; // Adjust as needed
-
-             // If the ground at the next spot is significantly higher than we can step, block movement
-             if (heightDifference > maxStepHeight) {
-                 allowMove = false;
-                 // console.log(`Wall collision? Current height: ${playerPosition.height.toFixed(1)}, Next surface: ${nextPosSurfaceHeight.toFixed(1)}`);
-             }
-             // If stepping up onto slightly higher ground while currently on a surface
-             else if (heightDifference > 0.1 && onSurface) {
-                 // Allow the move, and adjust player height to the new surface height
-                 playerPosition.height = nextPosSurfaceHeight;
-                 // Ensure vertical velocity is reset if stepping up while grounded
-                 if(verticalVelocity < 0) verticalVelocity = 0;
-             }
-             // Else (moving to lower or same height ground), allow move without height change here.
-        }
-
         // Apply the new longitude and latitude if movement is allowed
         if (allowMove) {
             playerPosition.longitude = newCartographic.longitude;
@@ -699,11 +628,9 @@ function update(currentTime) {
     }
 
     // --- 12. Update Instructions Display ---
-    const heightInfo = onBuilding
-        ? ` (On Building: ${currentSurfaceHeight.toFixed(1)}m)`
-        : ` (Altitude: ${playerPosition.height.toFixed(1)}m)`; // Show altitude relative to ellipsoid
+    const heightInfo = 
+        ` (Altitude: ${playerPosition.height.toFixed(1)}m)`; // Show altitude relative to ellipsoid
     instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}`;
-
 
 } // End of update function
 

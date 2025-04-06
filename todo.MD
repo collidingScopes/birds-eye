@@ -30,4 +30,4 @@ Can we do some caching in local storage to reduce bing maps sessions / data stre
 
 Deploy on vercel or netlify so that I can keep the token private
 
-Ground shouldn't shift when player moves. Also, ground not synced to the correct elevation of the bottom of the buildings
+Ground not synced to the correct elevation of the bottom of the buildings
