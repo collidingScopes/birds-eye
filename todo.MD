@@ -21,3 +21,11 @@ Frustum culling / LOD / other performance enhancements
 Collision detection so that the player can land on top of buildings
 
 Make "levels" in different cities where the player has to land on a building or get to a certain location as fast as possible (or collect secret items)
+
+multiplayer
+
+players can leave markers / notes for their favourite locations (saved to local storage) -- pictures, spotlights, minimap markers -- as if they are pinning on google maps
+
+More locations (enter gps coordinates or use current user location)
+
+Can we do some caching in local storage to reduce bing maps sessions / data streaming from cesium
