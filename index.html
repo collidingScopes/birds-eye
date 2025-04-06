@@ -36,7 +36,16 @@
 </body>
 
 <!-- IMPORTANT: Load supporting scripts first -->
-<script src="minimap.js"></script>
+<script src="minimap.js"></script> <!-- Ensure this file exists and defines MiniMap class -->
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+      }
+    }
+</script>
 
 <!-- Load main script as a module -->
 <script type="module" src="main.js"></script>

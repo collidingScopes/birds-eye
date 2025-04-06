@@ -1,10 +1,9 @@
-// --- Constants ---
 export const playerMoveSpeed = 100.0;
 export const cameraTurnSpeed = 2.0;
-export const cameraDistance = 0.0;
+export const cameraDistance = 10.0; // Adjusted for third-person
 export const jumpVelocity = 50;
 export const gravity = -50.0;
-export const groundHeight = 10.0; // Base height when not on a building
+export const groundHeight = 10.0;
 
 // City Coordinates
 export const cities = {
@@ -24,10 +23,10 @@ export const cities = {
  * Updates the forwardDirection and rightDirection vectors based on the current playerHeading.
  * Assumes playerHeading is radians clockwise from North.
  * Updates vectors in the ENU (East-North-Up) frame.
- * 
+ *
  * @param {number} playerHeading - Player heading in radians
- * @param {Object} forwardDirection - Forward direction vector to update
- * @param {Object} rightDirection - Right direction vector to update
+ * @param {Object} forwardDirection - Forward direction vector to update {x: East, y: North}
+ * @param {Object} rightDirection - Right direction vector to update {x: East, y: North}
  */
 export function updateDirectionVectors(playerHeading, forwardDirection, rightDirection) {
     // playerHeading: 0 = North, positive = CLOCKWISE (East=PI/2)
@@ -38,6 +37,13 @@ export function updateDirectionVectors(playerHeading, forwardDirection, rightDir
     // Forward direction in ENU (X=East, Y=North)
     forwardDirection.x = Math.cos(trigAngle);
     forwardDirection.y = Math.sin(trigAngle);
+    // Ensure normalization (might be redundant if trig functions are precise)
+    const fwdMag = Math.sqrt(forwardDirection.x**2 + forwardDirection.y**2);
+    if (fwdMag > 1e-6) {
+        forwardDirection.x /= fwdMag;
+        forwardDirection.y /= fwdMag;
+    }
+
 
     // Right direction (relative to forward, 90deg clockwise) in ENU
     // Rotation matrix for -90 deg: [cos(-90) -sin(-90)] [x] = [ 0  1] [x] = [ y]
@@ -45,12 +51,18 @@ export function updateDirectionVectors(playerHeading, forwardDirection, rightDir
     // So, rightDirection = (forwardDirection.y, -forwardDirection.x)
     rightDirection.x = forwardDirection.y;
     rightDirection.y = -forwardDirection.x;
+    // Ensure normalization
+    const rightMag = Math.sqrt(rightDirection.x**2 + rightDirection.y**2);
+     if (rightMag > 1e-6) {
+        rightDirection.x /= rightMag;
+        rightDirection.y /= rightMag;
+    }
 }
 
 /**
  * Gets cardinal direction name based on heading.
  * Assumes heading is radians clockwise from North.
- * 
+ *
  * @param {number} headingRad - Heading in radians
  * @returns {string} Cardinal direction name
  */
@@ -76,25 +88,25 @@ export function getDirection(headingRad) {
 
 /**
  * Sets up keyboard and city selector listeners.
- * 
- * @param {Object} inputState - Input state object
- * @param {Object} playerPosition - Player position object
- * @param {number} verticalVelocity - Reference to vertical velocity
- * @param {number} playerHeading - Reference to player heading
- * @param {number} cameraHeading - Reference to camera heading
- * @param {number} cameraPitch - Reference to camera pitch
- * @param {Function} updateDirectionVectors - Direction vectors update function
- * @param {Object} forwardDirection - Forward direction vector
- * @param {Object} rightDirection - Right direction vector
- * @param {Object} cities - City coordinates object
- * @param {Object} viewer - Cesium viewer instance
- * @param {Object} miniMap - Minimap instance
+ *
+ * @param {Object} inputState - Input state object to modify
+ * @param {Object} playerPosition - Player position object to modify on city change
+ * @param {Object} verticalVelocityRef - Reference object containing vertical velocity { value: number }
+ * @param {Object} playerHeadingRef - Reference object containing player heading { value: number }
+ * @param {Function} updateDirectionVectorsFunc - Function to update direction vectors
+ * @param {Object} forwardDirection - Forward direction vector to update
+ * @param {Object} rightDirection - Right direction vector to update
+ * @param {Object} citiesData - City coordinates object
+ * @param {Object} cesiumViewer - Cesium viewer instance
+ * @param {Object} miniMapInstance - Minimap instance
+ * @param {Object} cameraSystemInstance - Camera system instance
  */
-export function setupInputListeners(inputState, playerPosition, verticalVelocity, playerHeading, cameraHeading, 
-                              cameraPitch, updateDirectionVectors, forwardDirection, rightDirection, 
-                              cities, viewer, miniMap) {
+export function setupInputListeners(inputState, playerPosition, verticalVelocityRef, playerHeadingRef,
+    updateDirectionVectorsFunc, forwardDirection, rightDirection,
+    citiesData, cesiumViewer, miniMapInstance, cameraSystemInstance) {
+
     const citySelector = document.getElementById('citySelector');
-                                
+
     document.addEventListener('keydown', (event) => {
         const key = event.key.toUpperCase();
         let handled = true; // Flag to prevent default browser actions like scrolling
@@ -103,13 +115,13 @@ export function setupInputListeners(inputState, playerPosition, verticalVelocity
             case 'S': inputState.backward = true; break;
             case 'A': inputState.strafeLeft = true; break;
             case 'D': inputState.strafeRight = true; break;
-            // --- Camera/Player Turning ---
-            case 'ARROWLEFT': inputState.left = true; break; // Turn Left (CCW -> decrease heading)
-            case 'ARROWRIGHT': inputState.right = true; break; // Turn Right (CW -> increase heading)
-            // --- Camera Pitch ---
+            // --- Camera/Player Turning (Arrows) ---
+            case 'ARROWLEFT': inputState.left = true; break; // Camera turn Left
+            case 'ARROWRIGHT': inputState.right = true; break; // Camera turn Right
+            // --- Camera Pitch (Arrows) ---
             case 'ARROWUP': inputState.up = true; break;
             case 'ARROWDOWN': inputState.down = true; break;
-            case ' ': inputState.jump = true; break;
+            case ' ': inputState.jump = true; break; // Mark intent to jump
             default: handled = false; break; // Don't prevent default for other keys
         }
         if (handled) event.preventDefault(); // Prevent scrolling with arrow/space keys
@@ -126,59 +138,64 @@ export function setupInputListeners(inputState, playerPosition, verticalVelocity
             case 'ARROWRIGHT': inputState.right = false; break;
             case 'ARROWUP': inputState.up = false; break;
             case 'ARROWDOWN': inputState.down = false; break;
-            case ' ': inputState.jump = false; break; // Set jump to false on key up
+            // Note: We handle the jump action in the update loop based on the 'true' state
+            // Setting jump = false here isn't strictly necessary as it's consumed in update
+            // case ' ': inputState.jump = false; break;
         }
     });
 
     // City selection logic
     citySelector.addEventListener('change', (event) => {
         const selectedCity = event.target.value;
-        if (cities[selectedCity]) {
-            const cityCoords = cities[selectedCity];
+        if (citiesData[selectedCity]) {
+            console.log(`Changing city to: ${selectedCity}`);
+            const cityCoords = citiesData[selectedCity];
+
             // Reset player state
             playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
             playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
-            playerPosition.height = groundHeight;
-            
-            // Reset other player state
-            verticalVelocity = 0;
-            playerHeading = Cesium.Math.toRadians(0.0); // Reset heading to North
-            cameraHeading = Cesium.Math.toRadians(0.0);
-            cameraPitch = Cesium.Math.toRadians(-15.0); // Reset pitch
-            updateDirectionVectors(playerHeading, forwardDirection, rightDirection); // Update vectors for new heading
+            playerPosition.height = groundHeight + 1.0; // Start slightly above ground
+
+            // Reset physics and orientation state using refs
+            verticalVelocityRef.value = 0;
+            playerHeadingRef.value = Cesium.Math.toRadians(0.0); // Reset heading to North
+
+            // Update direction vectors for new heading
+            updateDirectionVectorsFunc(playerHeadingRef.value, forwardDirection, rightDirection);
 
             // Reset minimap
-            miniMap.update(playerPosition, playerHeading);
+            if (miniMapInstance) {
+                 miniMapInstance.update(playerPosition, playerHeadingRef.value);
+            }
 
-            // Fly Cesium camera smoothly to the new location
-            const targetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height + 500); // Start slightly above
-            viewer.camera.flyTo({
-                destination: targetWorldPos,
-                orientation: {
-                    heading: cameraHeading,
-                    pitch: cameraPitch,
-                    roll: 0.0
-                },
-                duration: 1.5 // Duration in seconds
-            });
-            
-            // Manually move camera back after flight to ensure correct distance
-            setTimeout(() => {
-                // Need to re-calculate target position as player might have moved slightly
-                const currentTargetPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
-                viewer.camera.setView({ 
-                    destination: currentTargetPos, 
+            // Use camera system for teleportation
+            if (cameraSystemInstance) {
+                // Teleport camera to new position with a smooth flight animation
+                // Pass the new player heading so camera starts facing the same way
+                cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.5); // 1.5 second flight
+            } else {
+                console.error("Camera System not available for teleport.");
+                // Legacy fallback (Consider removing if CameraSystem is always used)
+                const targetWorldPos = Cesium.Cartesian3.fromRadians(
+                    playerPosition.longitude,
+                    playerPosition.latitude,
+                    playerPosition.height + 500 // Fly to a point above
+                );
+                cesiumViewer.camera.flyTo({
+                    destination: targetWorldPos,
                     orientation: {
-                        heading: cameraHeading, 
-                        pitch: cameraPitch, 
+                        heading: playerHeadingRef.value,
+                        pitch: Cesium.Math.toRadians(-30.0), // Look down slightly more during flight
                         roll: 0.0
-                    }
+                    },
+                    duration: 1.5
                 });
-                viewer.camera.moveBackward(cameraDistance);
-                
-                // Force render after camera adjustment
-                const needsRender = true;
-            }, 1600); // Wait slightly longer than flight duration
+            }
+             // Indicate loading state while city potentially loads new tiles
+            const instructionsElement = document.getElementById('instructions');
+            if (instructionsElement) {
+                instructionsElement.innerHTML = `Loading ${selectedCity}...`;
+            }
         }
     });
 }

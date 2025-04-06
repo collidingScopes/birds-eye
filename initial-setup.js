@@ -1,59 +1,70 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/GLTFLoader.js';
 
 // Performance Settings
 const tilesMaximumScreenSpaceError = 50;
-const enableFrustumCulling = true; // Enable custom frustum culler (potentially redundant)
+const enableFrustumCulling = true;
 const enableLOD = true;
 
 /**
  * Initializes the Three.js scene
  * @returns {Object} Three.js objects
  */
-export function initThree() {
+export async function initThree() {
     const three = { scene: null, camera: null, renderer: null, playerMesh: null };
     
     const scene = new THREE.Scene();
     const canvas = document.getElementById('threeCanvas');
 
-    // Three.js camera - Its parameters will be overwritten by Cesium's
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 5, 50000); // Increased far plane for large scenes
+    //const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 5, 50000);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
+
     three.camera = camera;
 
     const renderer = new THREE.WebGLRenderer({
         canvas: canvas,
-        alpha: true, // Allow transparency
+        alpha: true,
         antialias: true,
         powerPreference: 'high-performance'
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.autoClear = false; // Manual control for overlaying
+    renderer.autoClear = false;
     three.renderer = renderer;
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(0, 10, 5); // Relative light position
+    directionalLight.position.set(0, 10, 5);
     scene.add(directionalLight);
 
-    // Player Mesh (Cylinder)
-    const radius = 0.3;
-    const height = 5.0;
-    // THREE.CylinderGeometry constructor: (radiusTop, radiusBottom, height, radialSegments)
-    const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);
-    const material = new THREE.MeshStandardMaterial({ color: 0xff8800 }); // Orange
-    const playerMesh = new THREE.Mesh(cylinder, material);
-    // Position the cylinder pivot at its base for easier alignment with Cesium height
-    playerMesh.position.set(0, height / 2, 0);
-    // Initial rotation to make cylinder upright along the Y-axis in Three.js
-    playerMesh.rotation.x = Math.PI / 2;
-    scene.add(playerMesh);
+    // Load GLB Model
+    const loader = new GLTFLoader();
+    try {
+        const gltf = await loader.loadAsync('assets/panda3DModel8.glb');
+        const playerMesh = gltf.scene;
 
-    scene.add(camera); // Add camera to the scene
+        playerMesh.scale.set(1, 1, 1); // Adjust scale as needed
+        playerMesh.position.set(0, 0, 0);
+        scene.add(playerMesh);
+        three.playerMesh = playerMesh;
+        console.log("GLB player model loaded successfully.");
+    } catch (error) {
+        console.error("Failed to load GLB model:", error);
+        const radius = 0.3;
+        const height = 5.0;
+        const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);
+        const material = new THREE.MeshStandardMaterial({ color: 0xff8800 });
+        const playerMesh = new THREE.Mesh(cylinder, material);
+        playerMesh.position.set(0, height / 2, 0);
+        playerMesh.rotation.x = Math.PI / 2;
+        scene.add(playerMesh);
+        three.playerMesh = playerMesh;
+    }
 
+    scene.add(camera);
     three.scene = scene;
-    three.playerMesh = playerMesh;
     console.log("Three.js scene initialized.");
     
     return three;
@@ -64,24 +75,21 @@ export function initThree() {
  * @returns {Object} Cesium viewer and camera
  */
 export function initCesium() {
-    // --- Cesium Viewer Initialization ---
     const viewer = new Cesium.Viewer('cesiumContainer', {
         animation: false, baseLayerPicker: false, fullscreenButton: false, geocoder: false,
         homeButton: false, infoBox: false, sceneModePicker: false, selectionIndicator: false,
         timeline: false, navigationHelpButton: false, scene3DOnly: true,
-        useDefaultRenderLoop: false, // We manage the render loop
+        useDefaultRenderLoop: false,
         maximumScreenSpaceError: tilesMaximumScreenSpaceError,
-        requestRenderMode: false, // Use continuous rendering for smoother updates
-        // terrainProvider: Cesium.createWorldTerrain() // Optional: Add terrain
-        infoBox: false, // Disable info box on click
-        selectionIndicator: false // Disable selection indicator
+        requestRenderMode: false,
+        infoBox: false,
+        selectionIndicator: false
     });
 
-    viewer.scene.screenSpaceCameraController.enableInputs = false; // Disable default Cesium controls
-    viewer.scene.globe.depthTestAgainstTerrain = true; // Important for collision and rendering order
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+    viewer.scene.globe.depthTestAgainstTerrain = true;
     const cesiumCamera = viewer.camera;
 
-    // --- Frustum Culling Implementation (Optional/Redundant Check) ---
     const FrustumCuller = {
         initialized: false,
         init: function(camera) {
@@ -111,7 +119,6 @@ export function initCesium() {
         }
     };
 
-    // Initialize the frustum culler (if enabled) - defer slightly
     if (enableFrustumCulling) {
         setTimeout(() => FrustumCuller.init(cesiumCamera), 100);
     }
@@ -127,23 +134,20 @@ export function initCesium() {
  */
 export async function loadOsmBuildings(viewer, instructionsElement) {
     try {
-        // Use Ion asset ID
         const osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188, {
             maximumScreenSpaceError: tilesMaximumScreenSpaceError,
-            maximumMemoryUsage: 2048,
+            // Removed maximumMemoryUsage as it's not valid in Cesium 1.119
             cullWithChildrenBounds: true,
-            skipLevelOfDetail: false, // Let Cesium manage LOD more dynamically
-            preferLeaves: true // Improves performance for dense areas
+            skipLevelOfDetail: false,
+            preferLeaves: true
         });
 
         viewer.scene.primitives.add(osmBuildingsTileset);
         osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e0e0e0')" });
 
-        // Wait for tileset to be ready
         await osmBuildingsTileset.readyPromise;
         console.log("OSM Buildings Tileset Ready.");
 
-        // Set up dynamic LOD
         if (enableLOD) {
             setupLOD(osmBuildingsTileset);
         }
@@ -158,7 +162,7 @@ export async function loadOsmBuildings(viewer, instructionsElement) {
         if (error instanceof Cesium.RequestErrorEvent) {
             console.error("Network error or CORS issue loading tileset?");
         } else if (error.message && (error.message.includes("401") || error.message.includes("404"))) {
-             console.error("Invalid Cesium ION Token or Asset ID permissions/not found?");
+            console.error("Invalid Cesium ION Token or Asset ID permissions/not found?");
         }
         throw error;
     }
@@ -174,6 +178,6 @@ function setupLOD(tileset) {
     tileset.dynamicScreenSpaceErrorDensity = 0.00278;
     tileset.dynamicScreenSpaceErrorFactor = 4.0;
     tileset.dynamicScreenSpaceErrorHeightFalloff = 0.25;
-    tileset.maximumScreenSpaceError = tilesMaximumScreenSpaceError; // Base SSE
+    tileset.maximumScreenSpaceError = tilesMaximumScreenSpaceError;
     console.log("LOD configured for tileset.");
 }
