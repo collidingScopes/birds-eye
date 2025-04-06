@@ -50,6 +50,13 @@ const inputState = {
     strafeRight: false  // D
 };
 
+// --- Building Detection Cache ---
+const buildingCache = {
+    valid: false,  // Whether we have valid cached data
+    hit: false,    // Whether a building was detected
+    height: 0      // Height of the detected building
+};
+
 // DOM Elements
 const instructionsElement = document.getElementById('instructions');
 const citySelector = document.getElementById('citySelector');
@@ -147,8 +154,8 @@ function update(currentTime) {
 
     // --- 4. Handle Jumping and Gravity ---
     // Check for building collision
-    const buildingCollision = checkBuildingCollision(viewer, playerPosition, osmBuildingsTileset, 100.0);
-    
+    const buildingCollision = checkBuildingCollision(viewer, playerPosition, osmBuildingsTileset, inputState, buildingCache, 20.0);
+
     // Determine the current surface height (ground or building)
     let surfaceHeight = groundHeight; // Default to ground level
     
@@ -263,7 +270,23 @@ function update(currentTime) {
                     height: playerPosition.height
                 };
                 
-                const newBuildingCollision = checkBuildingCollision(viewer, newPositionCheck, osmBuildingsTileset, 1.0);
+                // Create a temporary cache for this single check
+                const tempCache = {
+                    valid: false,
+                    hit: false,
+                    height: 0
+                };
+                
+                // Force horizontal movement to ensure the check runs
+                const forcedInputState = { forward: true };
+                const newBuildingCollision = checkBuildingCollision(
+                    viewer,
+                    newPositionCheck,
+                    osmBuildingsTileset,
+                    forcedInputState,
+                    tempCache,
+                    0
+                );
                 
                 // If we moved off the building (no collision or different height), start falling
                 if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
