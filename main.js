@@ -11,10 +11,8 @@ const cameraDistance = 20.0;
 const jumpVelocity = 50;
 const gravity = -50.0;
 const groundHeight = 30.0; // Base height when not on a building
-const minimapUpdateInterval = 500; // Interval for potential minimap data fetching (if implemented)
 
 // Performance Settings
-const visibilityRadius = 100.0; // Deprecated - Use Cesium's built-in culling primarily
 const tilesMaximumScreenSpaceError = 50;
 const enableFrustumCulling = true; // Enable custom frustum culler (potentially redundant)
 const enableLOD = true;
@@ -130,7 +128,7 @@ if (enableFrustumCulling) {
 }
 
 // --- Mini-map Initialization ---
-const miniMap = new MiniMap(200); // 200 meter radius
+const miniMap = new MiniMap(1000); //radius in meters
 
 // --- OSM Buildings Tileset Loading ---
 let osmBuildingsTileset = null;
@@ -202,18 +200,6 @@ function setupLOD(tileset) {
 function updateTilesetVisibility(position) {
     if (!osmBuildingsTileset || !osmBuildingsTileset.ready) return;
     osmBuildingsTileset.show = true; // Ensure it's shown
-
-    // Note: Cesium's view-frustum culling and LOD system are usually sufficient.
-    // DistanceDisplayCondition culls the *entire* tileset, which might not be desired.
-    // if (visibilityRadius > 0) {
-    //     if (osmBuildingsTileset.distanceDisplayCondition) {
-    //         osmBuildingsTileset.distanceDisplayCondition.far = visibilityRadius;
-    //     } else {
-    //         osmBuildingsTileset.distanceDisplayCondition = new Cesium.DistanceDisplayCondition(0.0, visibilityRadius);
-    //     }
-    // } else {
-    //     osmBuildingsTileset.distanceDisplayCondition = undefined;
-    // }
 }
 
 

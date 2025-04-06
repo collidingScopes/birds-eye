@@ -1,6 +1,6 @@
-// Simplified Mini-map implementation showing a wider area with fewer details
+// Improved Mini-map implementation with reduced clutter and better UI
 class MiniMap {
-    constructor(radius = 1000) { // Increased radius to show a wider area (500m)
+    constructor(radius) { // Increased radius to show a wider area (500m)
         this.radius = radius; // Search radius in meters
         this.canvas = document.createElement('canvas');
         this.canvas.width = 200;
@@ -31,6 +31,9 @@ class MiniMap {
             minLon: 0, maxLon: 0
         };
         
+        // Current neighborhood name
+        this.neighborhood = "";
+        
         // Setup the container styles
         this.setupStyles();
     
@@ -39,7 +42,7 @@ class MiniMap {
         this.toggleButton.id = 'minimapToggle';
         this.toggleButton.innerText = 'Hide Map';
         this.toggleButton.addEventListener('click', () => this.toggleMinimap());
-        this.container.appendChild(this.toggleButton);
+        document.body.appendChild(this.toggleButton); // Append to body instead of container
         
         this.visible = true;
     }
@@ -49,50 +52,13 @@ class MiniMap {
         this.container.style.position = 'absolute';
         this.container.style.top = '10px';
         this.container.style.right = '10px';
-        this.container.style.width = '200px';
-        this.container.style.height = '200px';
         this.container.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
         this.container.style.borderRadius = '50%';
         this.container.style.overflow = 'hidden';
         this.container.style.zIndex = '5';
         this.container.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
         this.container.style.border = '2px solid rgba(255, 255, 255, 0.3)';
-        
-        // Loading indicator style
-        const loadingStyle = document.createElement('style');
-        loadingStyle.textContent = `
-            #minimapLoading {
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                color: white;
-                font-size: 12px;
-                text-align: center;
-                text-shadow: 1px 1px 2px black;
-                pointer-events: none;
-            }
-            
-            #minimapToggle {
-                position: absolute;
-                bottom: 5px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: rgba(0, 0, 0, 0.6);
-                color: white;
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 3px;
-                padding: 2px 5px;
-                font-size: 10px;
-                cursor: pointer;
-                z-index: 6;
-            }
-            
-            #minimapToggle:hover {
-                background: rgba(40, 40, 40, 0.8);
-            }
-        `;
-        document.head.appendChild(loadingStyle);
+        this.container.style.display = 'block'; // Ensure visibility is controlled here
     }
     
     toggleMinimap() {
@@ -106,17 +72,17 @@ class MiniMap {
         }
     }
     
-    // Convert lat/lon to canvas x/y
+    // Convert lat/lon to canvas x/y, keeping player centered
     toCanvasCoords(lat, lon) {
         const canvas = this.canvas;
-        const range = {
-            x: this.bounds.maxLon - this.bounds.minLon,
-            y: this.bounds.maxLat - this.bounds.minLat
-        };
         
-        // Calculate the x,y position (normalized 0-1 then scaled to canvas)
-        const x = ((lon - this.bounds.minLon) / range.x) * canvas.width;
-        const y = (1 - ((lat - this.bounds.minLat) / range.y)) * canvas.height;
+        // Calculate the distance from player in degrees
+        const latDiff = lat - this.playerLat;
+        const lonDiff = lon - this.playerLon;
+        
+        // Center-based mapping - player is always in center
+        const x = (canvas.width / 2) + (lonDiff * (canvas.width / (this.bounds.maxLon - this.bounds.minLon)));
+        const y = (canvas.height / 2) - (latDiff * (canvas.height / (this.bounds.maxLat - this.bounds.minLat)));
         
         return { x, y };
     }
@@ -179,7 +145,6 @@ class MiniMap {
     
     async fetchMapData() {
         this.isLoading = true;
-        //this.loadingIndicator.style.display = 'block';
         this.lastQueryTime = Date.now();
         this.lastQueryLocation = { lat: this.playerLat, lon: this.playerLon };
         
@@ -189,8 +154,8 @@ class MiniMap {
             const query = `
                 [out:json];
                 (
-                    way["highway"~"motorway|trunk|primary|secondary"](around:${radius},${this.playerLat},${this.playerLon});
-                    way["name"](around:${radius},${this.playerLat},${this.playerLon});
+                    way["highway"~"motorway|trunk|primary"](around:${radius},${this.playerLat},${this.playerLon});
+                    relation["place"="neighbourhood"](around:${radius},${this.playerLat},${this.playerLon});
                 );
                 out body;
                 >;
@@ -219,13 +184,47 @@ class MiniMap {
             const data = await response.json();
             this.processData(data);
             
+            // Also get neighborhood data
+            this.fetchNeighborhoodData();
+            
         } catch (error) {
             console.warn('Error fetching map data:', error);
             // If we failed to load data, try again later
             this.hasData = this.hasData && this.currentData !== null;
         } finally {
             this.isLoading = false;
-            //this.loadingIndicator.style.display = this.hasData ? 'none' : 'block';
+        }
+    }
+    
+    async fetchNeighborhoodData() {
+        try {
+            const query = `
+                [out:json];
+                is_in(${this.playerLat},${this.playerLon})->.a;
+                relation(pivot.a)["place"="neighbourhood"];
+                out tags;
+            `;
+            
+            const response = await fetch('https://overpass-api.de/api/interpreter', {
+                method: 'POST',
+                body: 'data=' + encodeURIComponent(query),
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.elements && data.elements.length > 0) {
+                    // Find neighborhood with name
+                    const neighborhood = data.elements.find(el => el.tags && el.tags.name);
+                    if (neighborhood) {
+                        this.neighborhood = neighborhood.tags.name;
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Error fetching neighborhood data:', error);
         }
     }
     
@@ -334,7 +333,7 @@ class MiniMap {
         data.elements.forEach(el => {
             if (el.type === 'way' && el.tags && el.tags.highway) {
                 // Only show major roads
-                if (!['motorway', 'trunk', 'primary', 'secondary'].includes(el.tags.highway)) {
+                if (!['motorway', 'trunk', 'primary'].includes(el.tags.highway)) {
                     return;
                 }
                 
@@ -350,10 +349,6 @@ class MiniMap {
                     case 'primary':
                         ctx.strokeStyle = '#ffcc00';
                         ctx.lineWidth = 2;
-                        break;
-                    case 'secondary':
-                        ctx.strokeStyle = '#ffffff';
-                        ctx.lineWidth = 1;
                         break;
                     default:
                         return; // Skip other road types
@@ -395,12 +390,33 @@ class MiniMap {
                             p2: p2,
                             midX: (p1.x + p2.x) / 2,
                             midY: (p1.y + p2.y) / 2,
-                            angle: Math.atan2(p2.y - p1.y, p2.x - p1.x)
+                            angle: Math.atan2(p2.y - p1.y, p2.x - p1.x),
+                            // Calculate length of road segment on screen for importance
+                            length: Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2))
                         });
                     }
                 }
             }
         });
+        
+        // Sort road segments by importance (highway type) and length
+        roadSegments.sort((a, b) => {
+            // First sort by road type importance
+            const typeImportance = { 'motorway': 3, 'trunk': 2, 'primary': 1 };
+            const typeA = typeImportance[a.type] || 0;
+            const typeB = typeImportance[b.type] || 0;
+            
+            if (typeB !== typeA) {
+                return typeB - typeA;
+            }
+            
+            // Then by segment length (longer segments are more important)
+            return b.length - a.length;
+        });
+        
+        // Only keep the top N labels to reduce clutter
+        const maxLabels = 5;
+        const importantRoads = roadSegments.slice(0, maxLabels);
         
         // Add road labels with de-duplication
         ctx.font = '14px Arial'; // Increased font size
@@ -412,7 +428,7 @@ class MiniMap {
         // De-duplicate road labels by name
         const labeledRoads = {};
         
-        roadSegments.forEach(segment => {
+        importantRoads.forEach(segment => {
             // Skip if we've already labeled this road
             if (labeledRoads[segment.name]) return;
             
@@ -454,26 +470,42 @@ class MiniMap {
             ctx.restore();
         });
         
-        // Draw player position
-        const playerPoint = this.toCanvasCoords(this.playerLat, this.playerLon);
+        // Draw neighborhood name in the top-left corner
+        if (this.neighborhood) {
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = '#33ccff'; // Light blue for neighborhood name
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3;
+            
+            // Position in upper right with padding
+            const padding = 20;
+            ctx.strokeText(this.neighborhood, padding, padding);
+            ctx.fillText(this.neighborhood, padding, padding);
+        }
+        
+        // Draw player position (always centered)
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
         
         // Draw player direction (triangle)
         ctx.save();
-        ctx.translate(playerPoint.x, playerPoint.y);
-        ctx.rotate(-this.playerHeading); // Negated because canvas Y is inverted
+        ctx.translate(centerX, centerY);
+        ctx.rotate(this.playerHeading); // Don't negate heading for correct direction
         
         // Player marker
         ctx.fillStyle = '#ff0000';
         ctx.beginPath();
-        ctx.moveTo(0, -8); // Point at top
-        ctx.lineTo(-5, 5); // Bottom left
-        ctx.lineTo(5, 5);  // Bottom right
+        ctx.moveTo(0, -12); // Point at top
+        ctx.lineTo(-8, 8); // Bottom left
+        ctx.lineTo(8, 8);  // Bottom right
         ctx.closePath();
         ctx.fill();
         
         ctx.restore();
         
-        // Draw a compass rose in the center
+        // Draw a compass rose in the corner
         this.drawCompass();
         
         // Draw circular mask
@@ -494,37 +526,30 @@ class MiniMap {
     drawCompass() {
         const ctx = this.ctx;
         const center = { x: this.canvas.width/2, y: this.canvas.height/2 };
-        const radius = 15;
+        const radius = 40;
         
         ctx.save();
         ctx.translate(center.x, center.y);
-        
-        // Draw outer circle
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.stroke();
-        
+
         // Draw compass points
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 10px Arial';
+        ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
         // North
         ctx.fillStyle = '#ff6666';
-        ctx.fillText('N', 0, -radius - 5);
+        ctx.fillText('N', 0, -radius*2);
         
         // East
         ctx.fillStyle = 'white';
-        ctx.fillText('E', radius + 5, 0);
+        ctx.fillText('E', radius*2, 0);
         
         // South
-        ctx.fillText('S', 0, radius + 5);
+        ctx.fillText('S', 0, radius*2);
         
         // West
-        ctx.fillText('W', -radius - 5, 0);
+        ctx.fillText('W', -radius*2, 0);
         
         ctx.restore();
     }

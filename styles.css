@@ -36,10 +36,10 @@ html, body {
 /* Mini-map styles */
 #minimapContainer {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 150px; /* Slightly smaller */
-    height: 150px;
+    /* top: 10px; */
+    /* right: 10px; */
+    /* width: 150px; Slightly smaller */
+    /* height: 150px; */
     z-index: 5;
     background-color: rgba(0, 0, 0, 0.6);
     border-radius: 50%;
@@ -59,4 +59,34 @@ html, body {
 .cesium-viewer-toolbar {
     /* Example: Move Cesium toolbar if it conflicts */
     /* top: 50px; */
+}
+
+#minimapLoading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    text-align: center;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+}
+
+#minimapToggle {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    padding: 5px;
+    font-size: 10px;
+    cursor: pointer;
+    z-index: 6;
+}
+
+#minimapToggle:hover {
+    background: rgba(40, 40, 40, 0.8);
 }
