@@ -1,35 +1,21 @@
 // Import Three.js as an ES Module
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
+import { initThree, initCesium, loadOsmBuildings } from './initial-setup.js';
+import { 
+    updateDirectionVectors, 
+    setupInputListeners, 
+    getDirection, 
+    playerMoveSpeed, 
+    cameraTurnSpeed,
+    cameraDistance,
+    jumpVelocity,
+    gravity,
+    groundHeight,
+    cities
+} from './helper-functions.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
-
-// --- Constants ---
-const playerMoveSpeed = 100.0;
-const cameraTurnSpeed = 2.0;
-const cameraDistance = 20.0;
-const jumpVelocity = 50;
-const gravity = -50.0;
-const groundHeight = 10.0; // Base height when not on a building
-
-// Performance Settings
-const tilesMaximumScreenSpaceError = 50;
-const enableFrustumCulling = true; // Enable custom frustum culler (potentially redundant)
-const enableLOD = true;
-
-// City Coordinates
-const cities = {
-    nyc: { longitude: -73.9854, latitude: 40.7580 },
-    london: { longitude: -0.1276, latitude: 51.5074 },
-    tokyo: { longitude: 139.6917, latitude: 35.6895 },
-    paris: { longitude: 2.3522, latitude: 48.8566 },
-    sydney: { longitude: 151.2093, latitude: -33.8688 },
-    montreal: { longitude: -73.5674, latitude: 45.5019 },
-    toronto: { longitude: -79.3832, latitude: 43.6532 },
-    istanbul: { longitude: 28.9784, latitude: 41.0082 },
-    hanoi: { longitude: 105.8342, latitude: 21.0278 },
-    hongkong: { longitude: 114.1694, latitude: 22.3193 }
-};
 
 // --- State Variables ---
 let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight);
@@ -60,7 +46,7 @@ const inputState = {
     down: false,        // Arrow Down (Pitch Down)
     jump: false,        // Space
     strafeLeft: false,  // A
-    strafeRight: false // D
+    strafeRight: false  // D
 };
 
 // DOM Elements
@@ -73,313 +59,10 @@ let frameCount = 0;
 let lastFpsUpdate = 0;
 let currentFps = 0;
 
-// --- Cesium Viewer Initialization ---
-const viewer = new Cesium.Viewer('cesiumContainer', {
-    animation: false, baseLayerPicker: false, fullscreenButton: false, geocoder: false,
-    homeButton: false, infoBox: false, sceneModePicker: false, selectionIndicator: false,
-    timeline: false, navigationHelpButton: false, scene3DOnly: true,
-    useDefaultRenderLoop: false, // We manage the render loop
-    maximumScreenSpaceError: tilesMaximumScreenSpaceError,
-    requestRenderMode: false, // Use continuous rendering for smoother updates
-    // terrainProvider: Cesium.createWorldTerrain() // Optional: Add terrain
-    infoBox: false, // Disable info box on click
-    selectionIndicator: false // Disable selection indicator
-});
+// Three.js and Cesium objects
+let viewer, cesiumCamera, three, osmBuildingsTileset, FrustumCuller, miniMap;
 
-viewer.scene.screenSpaceCameraController.enableInputs = false; // Disable default Cesium controls
-viewer.scene.globe.depthTestAgainstTerrain = true; // Important for collision and rendering order
-const cesiumCamera = viewer.camera;
-
-// --- Frustum Culling Implementation (Optional/Redundant Check) ---
-const FrustumCuller = {
-    initialized: false,
-    init: function(camera) {
-        if (this.initialized || !camera || !camera.frustum) return;
-        this.camera = camera;
-        if (camera.frustum.fov && camera.frustum.aspectRatio && camera.frustum.near && camera.frustum.far) {
-            this.frustum = new Cesium.PerspectiveFrustum();
-            this.frustum.fov = camera.frustum.fov;
-            this.frustum.aspectRatio = camera.frustum.aspectRatio;
-            this.frustum.near = camera.frustum.near;
-            this.frustum.far = camera.frustum.far;
-            this.initialized = true;
-            // console.log("FrustumCuller initialized");
-        } else {
-            console.warn("FrustumCuller: Camera frustum properties not available yet for init.");
-        }
-    },
-    update: function() {
-        if (!this.initialized || !this.camera || !this.camera.frustum) return;
-        if (this.camera.frustum instanceof Cesium.PerspectiveFrustum || this.camera.frustum instanceof Cesium.PerspectiveOffCenterFrustum) {
-            if (Cesium.defined(this.camera.frustum.fov)) this.frustum.fov = this.camera.frustum.fov;
-            if (Cesium.defined(this.camera.frustum.aspectRatio)) this.frustum.aspectRatio = this.camera.frustum.aspectRatio;
-            if (Cesium.defined(this.camera.frustum.near)) this.frustum.near = this.camera.frustum.near;
-            if (Cesium.defined(this.camera.frustum.far)) this.frustum.far = this.camera.frustum.far;
-        } else {
-            // console.warn("FrustumCuller: Camera frustum is not Perspective type, cannot update.");
-            this.initialized = false;
-        }
-    }
-};
-
-// Initialize the frustum culler (if enabled) - defer slightly
-if (enableFrustumCulling) {
-    setTimeout(() => FrustumCuller.init(cesiumCamera), 100);
-}
-
-// --- Mini-map Initialization ---
-const miniMap = new MiniMap(1000); //radius in meters
-
-// --- OSM Buildings Tileset Loading ---
-let osmBuildingsTileset = null;
-async function loadOsmBuildings() {
-    try {
-        // Use Ion asset ID
-        osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188, {
-            maximumScreenSpaceError: tilesMaximumScreenSpaceError,
-            maximumMemoryUsage: 2048,
-            cullWithChildrenBounds: true,
-            skipLevelOfDetail: false, // Let Cesium manage LOD more dynamically
-            // baseScreenSpaceError: 1024, // Can experiment with these
-            // skipScreenSpaceErrorFactor: 16,
-            // skipLevels: 1,
-            // immediatelyLoadDesiredLevelOfDetail: false, // Prefer default lazy loading
-            // loadSiblings: false, // Prefer default lazy loading
-            // cullRequestsWhileMoving: true, // Allow culling while moving for performance
-            preferLeaves: true // Improves performance for dense areas
-        });
-
-        viewer.scene.primitives.add(osmBuildingsTileset);
-        osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e0e0e0')" });
-
-        // Wait for tileset to be ready
-        await osmBuildingsTileset.readyPromise;
-        console.log("OSM Buildings Tileset Ready.");
-
-        // Set up dynamic LOD
-        if (enableLOD) {
-            setupLOD(osmBuildingsTileset);
-        }
-
-        instructionsElement.innerHTML = "W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: North";
-        updateDirectionVectors(); // Ensure directions are set based on initial North heading
-        miniMap.update(playerPosition, playerHeading); // Update minimap
-
-    } catch (error) {
-        console.error(`Error loading Cesium OSM Buildings: ${error}`);
-        instructionsElement.innerHTML = "Error loading city data.<br>Check console.";
-        instructionsElement.style.color = 'red';
-        if (error instanceof Cesium.RequestErrorEvent) {
-            console.error("Network error or CORS issue loading tileset?");
-        } else if (error.message && (error.message.includes("401") || error.message.includes("404"))) {
-             console.error("Invalid Cesium ION Token or Asset ID permissions/not found?");
-        }
-    }
-}
-
-// Set up Level of Detail (LOD) for tileset
-function setupLOD(tileset) {
-    if (!tileset) return;
-    tileset.dynamicScreenSpaceError = true;
-    tileset.dynamicScreenSpaceErrorDensity = 0.00278;
-    tileset.dynamicScreenSpaceErrorFactor = 4.0;
-    tileset.dynamicScreenSpaceErrorHeightFalloff = 0.25;
-    tileset.maximumScreenSpaceError = tilesMaximumScreenSpaceError; // Base SSE
-    console.log("LOD configured for tileset.");
-}
-
-// Update tileset visibility (Potentially redundant with Cesium's culling)
-function updateTilesetVisibility(position) {
-    if (!osmBuildingsTileset || !osmBuildingsTileset.ready) return;
-    osmBuildingsTileset.show = true; // Ensure it's shown
-}
-
-
-// --- Three.js Scene Initialization ---
-const three = { scene: null, camera: null, renderer: null, playerMesh: null };
-function initThree() {
-    const scene = new THREE.Scene();
-    const canvas = document.getElementById('threeCanvas');
-
-    // Three.js camera - Its parameters will be overwritten by Cesium's
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50000); // Increased far plane for large scenes
-    three.camera = camera;
-
-    const renderer = new THREE.WebGLRenderer({
-        canvas: canvas,
-        alpha: true, // Allow transparency
-        antialias: true,
-        powerPreference: 'high-performance'
-    });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.autoClear = false; // Manual control for overlaying
-    three.renderer = renderer;
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(0, 10, 5); // Relative light position
-    scene.add(directionalLight);
-
-    // Player Mesh (Cylinder)
-    const radius = 0.3;
-    const height = 1.0;
-    // THREE.CylinderGeometry constructor: (radiusTop, radiusBottom, height, radialSegments)
-    const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);
-    const material = new THREE.MeshStandardMaterial({ color: 0xff8800 }); // Orange
-    const playerMesh = new THREE.Mesh(cylinder, material);
-    // Position the cylinder pivot at its base for easier alignment with Cesium height
-    playerMesh.position.set(0, height / 2, 0);
-    // Initial rotation to make cylinder upright along the Y-axis in Three.js
-    playerMesh.rotation.x = Math.PI / 2;
-    scene.add(playerMesh);
-
-    scene.add(camera); // Add camera to the scene
-
-    three.scene = scene;
-    three.playerMesh = playerMesh;
-    console.log("Three.js scene initialized.");
-}
-
-// --- Input Handling and Movement Logic ---
-
-/**
- * Updates the forwardDirection and rightDirection vectors based on the current playerHeading.
- * Assumes playerHeading is radians clockwise from North.
- * Updates vectors in the ENU (East-North-Up) frame.
- */
-function updateDirectionVectors() {
-    // playerHeading: 0 = North, positive = CLOCKWISE (East=PI/2)
-    // Standard Trig functions: 0 = East, positive = COUNTER-CLOCKWISE (North=PI/2)
-    // Angle for standard trig functions = PI/2 - playerHeading
-    const trigAngle = Cesium.Math.PI_OVER_TWO - playerHeading;
-
-    // Forward direction in ENU (X=East, Y=North)
-    forwardDirection.x = Math.cos(trigAngle);
-    forwardDirection.y = Math.sin(trigAngle);
-
-    // Right direction (relative to forward, 90deg clockwise) in ENU
-    // Rotation matrix for -90 deg: [cos(-90) -sin(-90)] [x] = [ 0  1] [x] = [ y]
-    //                              [sin(-90)  cos(-90)] [y]   [-1  0] [y]   [-x]
-    // So, rightDirection = (forwardDirection.y, -forwardDirection.x)
-    rightDirection.x = forwardDirection.y;
-    rightDirection.y = -forwardDirection.x;
-
-    // Optional: Log to verify directions based on heading
-    // console.log(`Heading: ${(Cesium.Math.toDegrees(playerHeading)).toFixed(1)} CW | Fwd(E,N): (${forwardDirection.x.toFixed(2)}, ${forwardDirection.y.toFixed(2)}) | Rgt(E,N): (${rightDirection.x.toFixed(2)}, ${rightDirection.y.toFixed(2)})`);
-}
-
-/**
- * Sets up keyboard and city selector listeners.
- */
-function setupInputListeners() {
-    document.addEventListener('keydown', (event) => {
-        const key = event.key.toUpperCase();
-        let handled = true; // Flag to prevent default browser actions like scrolling
-        switch (key) {
-            case 'W': inputState.forward = true; break;
-            case 'S': inputState.backward = true; break;
-            case 'A': inputState.strafeLeft = true; break;
-            case 'D': inputState.strafeRight = true; break;
-            // --- Camera/Player Turning ---
-            case 'ARROWLEFT': inputState.left = true; break; // Turn Left (CCW -> decrease heading)
-            case 'ARROWRIGHT': inputState.right = true; break; // Turn Right (CW -> increase heading)
-            // --- Camera Pitch ---
-            case 'ARROWUP': inputState.up = true; break;
-            case 'ARROWDOWN': inputState.down = true; break;
-            case ' ': inputState.jump = true; break;
-            default: handled = false; break; // Don't prevent default for other keys
-        }
-        if (handled) event.preventDefault(); // Prevent scrolling with arrow/space keys
-    });
-
-    document.addEventListener('keyup', (event) => {
-        const key = event.key.toUpperCase();
-        switch (key) {
-            case 'W': inputState.forward = false; break;
-            case 'S': inputState.backward = false; break;
-            case 'A': inputState.strafeLeft = false; break;
-            case 'D': inputState.strafeRight = false; break;
-            case 'ARROWLEFT': inputState.left = false; break;
-            case 'ARROWRIGHT': inputState.right = false; break;
-            case 'ARROWUP': inputState.up = false; break;
-            case 'ARROWDOWN': inputState.down = false; break;
-            case ' ': inputState.jump = false; break; // Set jump to false on key up
-        }
-    });
-
-    // City selection logic
-    citySelector.addEventListener('change', (event) => {
-        const selectedCity = event.target.value;
-        if (cities[selectedCity]) {
-            const cityCoords = cities[selectedCity];
-            // Reset player state
-            playerPosition = Cesium.Cartographic.fromDegrees(cityCoords.longitude, cityCoords.latitude, groundHeight);
-            verticalVelocity = 0;
-            playerHeading = Cesium.Math.toRadians(0.0); // Reset heading to North
-            cameraHeading = Cesium.Math.toRadians(0.0);
-            cameraPitch = Cesium.Math.toRadians(-15.0); // Reset pitch
-            updateDirectionVectors(); // Update vectors for new heading
-
-            // Force immediate update of tile visibility might not be needed if relying on Cesium culling
-            // updateTilesetVisibility(playerPosition);
-
-            // Reset minimap
-            miniMap.update(playerPosition, playerHeading);
-
-            // Fly Cesium camera smoothly to the new location
-             const targetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height + 500); // Start slightly above
-             viewer.camera.flyTo({
-                 destination: targetWorldPos,
-                 orientation: {
-                     heading: cameraHeading,
-                     pitch: cameraPitch,
-                     roll: 0.0
-                 },
-                 duration: 1.5 // Duration in seconds
-             });
-             // Manually move camera back after flight to ensure correct distance
-            setTimeout(() => {
-                // Need to re-calculate target position as player might have moved slightly
-                const currentTargetPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
-                viewer.camera.setView({ destination: currentTargetPos, orientation: {heading: cameraHeading, pitch: cameraPitch, roll: 0.0}});
-                viewer.camera.moveBackward(cameraDistance);
-                needsRender = true; // Force render after camera adjustment
-            }, 1600); // Wait slightly longer than flight duration
-
-
-            needsRender = true; // Ensure re-render after city change
-        }
-    });
-}
-
-/**
- * Gets cardinal direction name based on heading.
- * Assumes heading is radians clockwise from North.
- */
-function getDirection(headingRad) {
-    const twoPi = 2.0 * Math.PI;
-    // Normalize heading to 0 <= heading < 2*PI
-    let heading = headingRad % twoPi;
-    if (heading < 0) {
-        heading += twoPi;
-    }
-    let degrees = Cesium.Math.toDegrees(heading);
-
-    if (degrees >= 337.5 || degrees < 22.5) return "North";
-    if (degrees >= 22.5 && degrees < 67.5) return "Northeast";
-    if (degrees >= 67.5 && degrees < 112.5) return "East";
-    if (degrees >= 112.5 && degrees < 157.5) return "Southeast";
-    if (degrees >= 157.5 && degrees < 202.5) return "South";
-    if (degrees >= 202.5 && degrees < 247.5) return "Southwest";
-    if (degrees >= 247.5 && degrees < 292.5) return "West";
-    if (degrees >= 292.5 && degrees < 337.5) return "Northwest";
-    return "Unknown"; // Should not happen
-}
-
-// --- Game Loop ---
+// --- Game Loop Variables ---
 let lastTime = 0; // Timestamp of the last frame
 const renderInterval = 1000 / 60; // Target 60 FPS update interval (approx 16.67ms)
 let lastRenderTime = 0; // Timestamp of the last render execution
@@ -445,7 +128,7 @@ function update(currentTime) {
         const twoPi = 2.0 * Math.PI;
         playerHeading = ((playerHeading % twoPi) + twoPi) % twoPi;
         cameraHeading = playerHeading; // Keep camera heading aligned with player
-        updateDirectionVectors(); // Recalculate movement vectors based on new heading
+        updateDirectionVectors(playerHeading, forwardDirection, rightDirection); // Recalculate movement vectors based on new heading
         needsRender = true;
     }
 
@@ -562,8 +245,7 @@ function update(currentTime) {
     // --- 6. Update Tileset Visibility & Frustum Culling ---
     // Update Cesium's internal visibility checks if player moved or forced render
     if (movedHorizontally || needsRender) {
-        // updateTilesetVisibility(playerPosition); // Maybe not needed
-        if (enableFrustumCulling && FrustumCuller.initialized) {
+        if (FrustumCuller && FrustumCuller.initialized) {
             FrustumCuller.update(); // Update custom culler if enabled
         }
     }
@@ -591,8 +273,6 @@ function update(currentTime) {
     // Therefore, Three.js rotation = -playerHeading.
     if (three.playerMesh) {
          three.playerMesh.rotation.y = -playerHeading;
-         // We might need to adjust the mesh's position slightly if its pivot isn't perfectly at the base
-         // three.playerMesh.position.y = height / 2; // Ensure it sits on the ground plane in three.js space
     }
 
 
@@ -631,42 +311,53 @@ function update(currentTime) {
     const heightInfo = 
         ` (Altitude: ${playerPosition.height.toFixed(1)}m)`; // Show altitude relative to ellipsoid
     instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}`;
-
 } // End of update function
 
 // --- Initialization Sequence ---
+async function initialize() {
+    // Initialize Three.js scene first
+    three = initThree();
 
-// Initialize Three.js scene first
-initThree();
+    // Initialize Cesium and get viewer
+    const result = initCesium();
+    viewer = result.viewer;
+    cesiumCamera = result.cesiumCamera;
+    FrustumCuller = result.FrustumCuller;
 
-// Set up input listeners
-setupInputListeners();
+    // Initialize the minimap
+    miniMap = new MiniMap(1000); // radius in meters
 
-// Calculate initial direction vectors based on starting heading (North)
-updateDirectionVectors();
+    // Set up input listeners
+    setupInputListeners(inputState, playerPosition, verticalVelocity, playerHeading, cameraHeading, 
+                        cameraPitch, updateDirectionVectors, forwardDirection, rightDirection, 
+                        cities, viewer, miniMap);
 
-// Asynchronously load the Cesium 3D Tileset and then start the game loop
-loadOsmBuildings().then(() => {
-     console.log("Initial setup complete. Starting update loop.");
+    // Calculate initial direction vectors based on starting heading (North)
+    updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
 
-     // Set initial camera view after Cesium and tileset are ready
-     const initialTargetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
-     cesiumCamera.setView({
-         destination: initialTargetWorldPos,
-         orientation: { heading: cameraHeading, pitch: cameraPitch, roll: 0.0 }
-     });
-     cesiumCamera.moveBackward(cameraDistance); // Apply initial camera distance
+    try {
+        // Load the OSM buildings tileset
+        osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
+        
+        console.log("Initial setup complete. Starting update loop.");
 
-    // Start the custom render loop
-    lastTime = performance.now(); // Initialize time for first delta calculation
-    requestAnimationFrame(update);
+        // Set initial camera view after Cesium and tileset are ready
+        const initialTargetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
+        cesiumCamera.setView({
+            destination: initialTargetWorldPos,
+            orientation: { heading: cameraHeading, pitch: cameraPitch, roll: 0.0 }
+        });
+        cesiumCamera.moveBackward(cameraDistance); // Apply initial camera distance
 
-}).catch(error => {
-    console.error("Failed to initialize application after loading buildings:", error);
-     instructionsElement.innerHTML = "Failed to initialize. Check console for errors.";
-     instructionsElement.style.color = 'red';
-});
-
+        // Start the custom render loop
+        lastTime = performance.now(); // Initialize time for first delta calculation
+        requestAnimationFrame(update);
+    } catch (error) {
+        console.error("Failed to initialize application after loading buildings:", error);
+        instructionsElement.innerHTML = "Failed to initialize. Check console for errors.";
+        instructionsElement.style.color = 'red';
+    }
+}
 
 // --- Window Resize Handling ---
 window.addEventListener('resize', () => {
@@ -690,3 +381,6 @@ window.addEventListener('resize', () => {
 
     needsRender = true; // Force a re-render after resize
 });
+
+// Start initialization
+initialize();
