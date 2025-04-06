@@ -13,6 +13,7 @@ import {
     groundHeight,
     cities
 } from './helper-functions.js';
+import { checkBuildingCollision } from './building-collision.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -145,10 +146,24 @@ function update(currentTime) {
     cameraPitch = Cesium.Math.clamp(cameraPitch, Cesium.Math.toRadians(-85.0), Cesium.Math.toRadians(20.0));
 
     // --- 4. Handle Jumping and Gravity ---
-    //allow infinite jumping
+    // Check for building collision
+    const buildingCollision = checkBuildingCollision(viewer, playerPosition, osmBuildingsTileset, 100.0);
+    
+    // Determine the current surface height (ground or building)
+    let surfaceHeight = groundHeight; // Default to ground level
+    
+    // If there's a building below and it's higher than ground level, use that as the surface
+    if (buildingCollision.hit && buildingCollision.height > groundHeight) {
+        surfaceHeight = buildingCollision.height;
+    }
+    
+    // Check if player is on a surface (within a small threshold)
+    const onSurface = Math.abs(playerPosition.height - surfaceHeight) < 0.5 && verticalVelocity <= 0;
+    
+    // Handle jumping - only allow when on a surface
     if (inputState.jump) {
         verticalVelocity = jumpVelocity;
-        playerPosition.height += 0.1; // Give a small boost off the ground
+        playerPosition.height += 0.1; // Give a small boost off the surface
         needsRender = true;
         inputState.jump = false; // Consume the jump input (single press = single jump)
     }
@@ -159,10 +174,10 @@ function update(currentTime) {
     // Update player height based on vertical velocity
     playerPosition.height += verticalVelocity * deltaTime;
 
-    // Ground collision check - prevent falling below groundHeight
-    if (playerPosition.height < groundHeight) {
-        playerPosition.height = groundHeight;
-        verticalVelocity = 0; // Reset vertical velocity when on ground
+    // Surface collision check - prevent falling below current surface height
+    if (playerPosition.height < surfaceHeight) {
+        playerPosition.height = surfaceHeight;
+        verticalVelocity = 0; // Reset vertical velocity when on a surface
     }
 
     needsRender = true; // Height changed
@@ -238,6 +253,24 @@ function update(currentTime) {
             playerPosition.longitude = newCartographic.longitude;
             playerPosition.latitude = newCartographic.latitude;
             // Note: Height might have already been adjusted by the step-up logic above.
+            
+            // Check if we moved off a building and need to start falling
+            if (onSurface && buildingCollision.hit) {
+                // Do another collision check at the new horizontal position
+                const newPositionCheck = {
+                    longitude: playerPosition.longitude,
+                    latitude: playerPosition.latitude,
+                    height: playerPosition.height
+                };
+                
+                const newBuildingCollision = checkBuildingCollision(viewer, newPositionCheck, osmBuildingsTileset, 1.0);
+                
+                // If we moved off the building (no collision or different height), start falling
+                if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
+                    // Slight downward boost to start falling
+                    verticalVelocity = -0.1;
+                }
+            }
         }
     } // end if (movedHorizontally)
 
@@ -310,7 +343,10 @@ function update(currentTime) {
     // --- 12. Update Instructions Display ---
     const heightInfo = 
         ` (Altitude: ${playerPosition.height.toFixed(1)}m)`; // Show altitude relative to ellipsoid
-    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}`;
+    const buildingInfo = buildingCollision.hit ? 
+        ` | Building: ${buildingCollision.height.toFixed(1)}m` : 
+        "";
+    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
 } // End of update function
 
 // --- Initialization Sequence ---

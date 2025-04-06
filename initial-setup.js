@@ -16,7 +16,7 @@ export function initThree() {
     const canvas = document.getElementById('threeCanvas');
 
     // Three.js camera - Its parameters will be overwritten by Cesium's
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50000); // Increased far plane for large scenes
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 5, 50000); // Increased far plane for large scenes
     three.camera = camera;
 
     const renderer = new THREE.WebGLRenderer({
@@ -39,7 +39,7 @@ export function initThree() {
 
     // Player Mesh (Cylinder)
     const radius = 0.3;
-    const height = 1.0;
+    const height = 5.0;
     // THREE.CylinderGeometry constructor: (radiusTop, radiusBottom, height, radialSegments)
     const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);
     const material = new THREE.MeshStandardMaterial({ color: 0xff8800 }); // Orange
