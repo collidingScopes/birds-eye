@@ -89,6 +89,7 @@
         let cameraHeading = Cesium.Math.toRadians(0.0);
         let cameraPitch = Cesium.Math.toRadians(-15.0);
         let verticalVelocity = 0.0;
+        let forwardDirection = { x: 1, y: 0 };
 
         const inputState = {
             forward: false, 
@@ -158,6 +159,14 @@
             three.playerMesh = playerMesh;
         }
 
+        function updateForwardDirection() {
+            // Cesium uses East-North-Up coordinate system
+            // East is 0 degrees, North is 90 degrees
+            // We need to align our forward direction with this
+            forwardDirection.x = Math.sin(playerHeading);  // East component
+            forwardDirection.y = Math.cos(playerHeading);  // North component
+        }
+
         function setupInputListeners() {
             document.addEventListener('keydown', (event) => {
                 const key = event.key.toUpperCase();
@@ -191,6 +200,7 @@
                 verticalVelocity = 0;
                 playerHeading = Cesium.Math.toRadians(0.0);
                 cameraHeading = Cesium.Math.toRadians(0.0);
+                updateForwardDirection();
             });
         }
 
@@ -214,22 +224,25 @@
             lastTime = currentTime;
 
             // 1. Update Camera Heading (Left/Right arrows)
-            if (inputState.left) cameraHeading -= cameraTurnSpeed * deltaTime;
-            if (inputState.right) cameraHeading += cameraTurnSpeed * deltaTime;
+            if (inputState.left) {
+                cameraHeading -= cameraTurnSpeed * deltaTime;
+                playerHeading -= cameraTurnSpeed * deltaTime;
+                updateForwardDirection();
+            }
+            if (inputState.right) {
+                cameraHeading += cameraTurnSpeed * deltaTime;
+                playerHeading += cameraTurnSpeed * deltaTime;
+                updateForwardDirection();
+            }
             cameraHeading = Cesium.Math.zeroToTwoPi(cameraHeading);
+            playerHeading = Cesium.Math.zeroToTwoPi(playerHeading);
 
             // 2. Update Camera Pitch (Up/Down arrows)
             if (inputState.up) cameraPitch += cameraTurnSpeed * deltaTime;
             if (inputState.down) cameraPitch -= cameraTurnSpeed * deltaTime;
             cameraPitch = Cesium.Math.clamp(cameraPitch, -Cesium.Math.PI_OVER_TWO + 0.05, Cesium.Math.toRadians(groundHeight));
 
-            // 3. Smoothly interpolate player heading to match camera heading
-            const headingDiff = Cesium.Math.zeroToTwoPi(cameraHeading - playerHeading);
-            const shortestDiff = headingDiff > Math.PI ? headingDiff - Cesium.Math.TWO_PI : headingDiff;
-            playerHeading += shortestDiff * cameraFollowSpeed * deltaTime;
-            playerHeading = Cesium.Math.zeroToTwoPi(playerHeading);
-
-            // 4. Handle Jumping and Gravity
+            // 3. Handle Jumping and Gravity
             if (inputState.jump) {
                 verticalVelocity = jumpVelocity;
                 inputState.jump = false;
@@ -241,7 +254,7 @@
                 verticalVelocity = 0;
             }
 
-            // 5. Update Player Position (W/S) based on playerHeading
+            // 4. Update Player Position (W/S) using forwardDirection
             const moveAmount = playerMoveSpeed * deltaTime;
             let moveDirection = new Cesium.Cartesian3(0, 0, 0);
             const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
@@ -249,8 +262,9 @@
 
             if (inputState.forward || inputState.backward) {
                 const direction = inputState.forward ? 1 : -1;
-                moveDirection.x = direction * Math.cos(playerHeading);
-                moveDirection.y = direction * Math.sin(playerHeading);
+                // Apply movement in East (x) and North (y) directions
+                moveDirection.x = forwardDirection.x * direction;
+                moveDirection.y = forwardDirection.y * direction;
                 Cesium.Cartesian3.normalize(moveDirection, moveDirection);
                 Cesium.Cartesian3.multiplyByScalar(moveDirection, moveAmount, moveDirection);
 
@@ -261,7 +275,7 @@
                 playerPosition.latitude = newCartographic.latitude;
             }
 
-            // 6. Position Camera Behind Player
+            // 5. Position Camera Behind Player
             const targetWorldPosition = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
             cesiumCamera.setView({
                 destination: targetWorldPosition,
@@ -269,20 +283,20 @@
             });
             cesiumCamera.moveBackward(cameraDistance);
 
-            // 7. Update Player Mesh Orientation
+            // 6. Update Player Mesh Orientation
             three.playerMesh.rotation.y = -playerHeading;
 
-            // 8. Sync Three.js Camera
+            // 7. Sync Three.js Camera
             three.renderer.clear();
             three.camera.projectionMatrix.fromArray(cesiumCamera.frustum.projectionMatrix);
             three.camera.matrixWorldInverse.fromArray(cesiumCamera.viewMatrix);
             three.camera.matrixWorld.copy(three.camera.matrixWorldInverse).invert();
 
-            // 9. Render
+            // 8. Render
             viewer.render();
             three.renderer.render(three.scene, three.camera);
 
-            // 10. Update Instructions
+            // 9. Update Instructions
             instructionsElement.innerHTML = `W/S: Move Forward/Backward<br>Arrow Keys: Move Camera<br>Space: Jump<br>Facing: ${getDirection(playerHeading)}`;
 
             requestAnimationFrame(update);
@@ -291,6 +305,7 @@
         initThree();
         setupInputListeners();
         loadOsmBuildings();
+        updateForwardDirection();
 
         const initialTargetWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
         cesiumCamera.setView({
