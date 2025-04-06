@@ -9,6 +9,8 @@ Minimap:
 - keep the player positioned in the center
 - direction is incorrect, just show as a dot instead?
 - need to add a "show" button after hiding it
+- only show max of 4 roads?
+- show neighborhood name in different font color
 
 different style palettes for buildings / shader options (cyberpunk, realistic, day-night mode, sun, rain, snow, etc..)
 
