@@ -7,6 +7,7 @@ const cameraDistance = 20.0;
 const jumpVelocity = 50;
 const gravity = -50.0;
 const groundHeight = 30.0;
+const minimapUpdateInterval = 500; // Milliseconds between minimap data fetches
 
 // Performance optimization settings
 const visibilityRadius = 100.0; // Meters to render buildings around player (higher value for more visibility)
@@ -92,6 +93,9 @@ if (enableFrustumCulling) {
     FrustumCuller.init(cesiumCamera);
 }
 
+// Initialize the mini-map
+const miniMap = new MiniMap(200); // 200 meter radius
+
 let osmBuildingsTileset = null;
 async function loadOsmBuildings() {
     try {
@@ -120,6 +124,9 @@ async function loadOsmBuildings() {
         }
         
         instructionsElement.innerHTML = "W/S: Move Forward/Backward<br>A/D: Strafe Left/Right<br>Arrow Keys: Move Camera<br>Space: Jump<br>Facing: East";
+        
+        // Initialize mini-map with current position
+        miniMap.update(playerPosition, playerHeading);
     } catch (error) {
         console.error(`Error loading Cesium OSM Buildings: ${error}`);
         instructionsElement.innerHTML = "Error loading city data.<br>Check console.";
@@ -138,7 +145,7 @@ function setupLOD(tileset) {
     tileset.dynamicScreenSpaceErrorFactor = 4.0;
 }
 
-// Function to update visibility of 3D Tiles based on distance
+// Update tileset visibility based on player position
 function updateTilesetVisibility(position) {
     if (!osmBuildingsTileset) return;
     
@@ -457,11 +464,14 @@ function update(currentTime) {
     three.camera.matrixWorldInverse.fromArray(cesiumCamera.viewMatrix);
     three.camera.matrixWorld.copy(three.camera.matrixWorldInverse).invert();
 
-    // 9. Render
+    // 9. Update mini-map with new player position and heading
+    miniMap.update(playerPosition, playerHeading);
+
+    // 10. Render
     viewer.render();
     three.renderer.render(three.scene, three.camera);
 
-    // 10. Update Instructions with enhanced building info
+    // 11. Update Instructions with enhanced building info
     const onBuilding = currentGroundHeight > groundHeight + 0.1 
         ? ` (On Building: ${(currentGroundHeight - groundHeight).toFixed(1)}m high)` 
         : "";

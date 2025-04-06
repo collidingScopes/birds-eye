@@ -1,11 +1,14 @@
-teleport to other cities
-Spin up some other tokens 
+Spin up some other cesium tokens 
 
 Make forward moevment faster (allow walk or sprint or fly speeds)
 
-Add minimap / street names / key landmarks / other actual world data
-
 Speed boost, jetpack, bird mode, plane mode, car mode, coins, etc.....
+
+Minimap:
+- update more frequently?
+- keep the player positioned in the center
+- direction is incorrect, just show as a dot instead?
+- need to add a "show" button after hiding it
 
 different style palettes for buildings / shader options (cyberpunk, realistic, day-night mode, sun, rain, snow, etc..)
 
@@ -14,9 +17,6 @@ Change the city aesthetic based on real weather conditions / time of day
 Spiderman mode (swing on buildings by clicking them)
 
 Use character animation instead
-
-Frustum culling / LOD / other performance enhancements
-only render building / ground data that is close
 
 Collision detection so that the player can land on top of buildings
 
@@ -32,4 +32,4 @@ Can we do some caching in local storage to reduce bing maps sessions / data stre
 
 Deploy on vercel or netlify so that I can keep the token private
 
-Ground moves when player moves / is not synced to the correct elevation of the bottom of the buildings
+Ground shouldn't shift when player moves. Also, ground not synced to the correct elevation of the bottom of the buildings
