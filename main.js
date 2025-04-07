@@ -244,8 +244,11 @@ function update(currentTime) {
     // --- 6. Update Three.js Player Mesh Orientation and Position ---
     if (three.playerMesh) {
         // three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
-        three.playerMesh.rotation.set(0, Math.PI - playerHeading, 0);
-        three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
+        three.playerMesh.rotation.x = Math.PI/2;
+        three.playerMesh.rotation.y = Math.PI - playerHeading;
+        three.playerMesh.rotation.z = -playerHeading;
+        
+        //three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
         
         // Update animations based on player state
         if (three.animationSystem) {
@@ -256,15 +259,6 @@ function update(currentTime) {
 
     // --- 8. Update Mini-map ---
     miniMap.update(playerPosition, playerHeading);
-
-    // --- 9. Render Both Scenes ---
-    /*
-    if (three.renderer) {
-        three.renderer.clear();
-    }
-    if (viewer) {
-    }
-    */
 
     if (three.renderer && three.scene && three.camera) {
         three.renderer.render(three.scene, three.camera);

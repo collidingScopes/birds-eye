@@ -11,7 +11,7 @@ export class CameraSystem {
     constructor(cesiumCamera, threeCamera, defaultDistance, defaultHeight) {
         this.cesiumCamera = cesiumCamera;
         this.threeCamera = threeCamera;
-        this.cameraDistance = 15;
+        this.cameraDistance = 10;
         this.cameraHeight = 2;
         this.initialCameraPitch = 0; //radians
 
