@@ -1,4 +1,4 @@
-// Improved Mini-map implementation with reduced clutter and better UI
+// Improved Mini-map implementation with additional road names and secondary roads
 class MiniMap {
     constructor(radius) { // Increased radius to show a wider area (500m)
         this.radius = radius; // Search radius in meters
@@ -149,12 +149,12 @@ class MiniMap {
         this.lastQueryLocation = { lat: this.playerLat, lon: this.playerLon };
         
         try {
-            // Simplified query to only fetch major roads
+            // Modified query to include secondary roads
             const radius = this.radius;
             const query = `
                 [out:json];
                 (
-                    way["highway"~"motorway|trunk|primary"](around:${radius},${this.playerLat},${this.playerLon});
+                    way["highway"~"motorway|trunk|primary|secondary"](around:${radius},${this.playerLat},${this.playerLon});
                     relation["place"="neighbourhood"](around:${radius},${this.playerLat},${this.playerLon});
                 );
                 out body;
@@ -332,8 +332,8 @@ class MiniMap {
         
         data.elements.forEach(el => {
             if (el.type === 'way' && el.tags && el.tags.highway) {
-                // Only show major roads
-                if (!['motorway', 'trunk', 'primary'].includes(el.tags.highway)) {
+                // Include secondary roads now
+                if (!['motorway', 'trunk', 'primary', 'secondary'].includes(el.tags.highway)) {
                     return;
                 }
                 
@@ -349,6 +349,10 @@ class MiniMap {
                     case 'primary':
                         ctx.strokeStyle = '#ffcc00';
                         ctx.lineWidth = 2;
+                        break;
+                    case 'secondary':
+                        ctx.strokeStyle = '#cccc00'; // Yellow-ish for secondary roads
+                        ctx.lineWidth = 1.5;
                         break;
                     default:
                         return; // Skip other road types
@@ -402,7 +406,7 @@ class MiniMap {
         // Sort road segments by importance (highway type) and length
         roadSegments.sort((a, b) => {
             // First sort by road type importance
-            const typeImportance = { 'motorway': 3, 'trunk': 2, 'primary': 1 };
+            const typeImportance = { 'motorway': 4, 'trunk': 3, 'primary': 2, 'secondary': 1 };
             const typeA = typeImportance[a.type] || 0;
             const typeB = typeImportance[b.type] || 0;
             
@@ -414,8 +418,8 @@ class MiniMap {
             return b.length - a.length;
         });
         
-        // Only keep the top N labels to reduce clutter
-        const maxLabels = 5;
+        // Increased to 7 road labels
+        const maxLabels = 7;
         const importantRoads = roadSegments.slice(0, maxLabels);
         
         // Add road labels with de-duplication
@@ -458,6 +462,9 @@ class MiniMap {
                     break;
                 case 'primary':
                     ctx.fillStyle = '#ffffff';
+                    break;
+                case 'secondary':
+                    ctx.fillStyle = '#dddddd'; // Slightly darker for secondary roads
                     break;
                 default:
                     ctx.fillStyle = '#cccccc';
