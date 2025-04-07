@@ -17,7 +17,12 @@ export class AnimationSystem {
         this.currentAction = null;
         this.previousAction = null;
         this.animationsLoaded = false;
-        this.transitionDuration = 0.5; // Transition time between animations in seconds
+        this.transitionDuration = 0.1; // Transition time between animations in seconds
+        
+        // Add state tracking to prevent animation flickering
+        this.isJumping = false;
+        this.isFalling = false;
+        this.currentAnimationName = null;
     }
 
     /**
@@ -79,6 +84,9 @@ export class AnimationSystem {
             console.warn(`Animation '${name}' not found`);
             return;
         }
+        
+        // Track the current animation name
+        this.currentAnimationName = name;
         
         // Don't restart the same animation
         if (this.currentAction === animation.action && animation.action.isRunning()) {
@@ -159,22 +167,52 @@ export class AnimationSystem {
         
         const isMoving = inputState.forward || inputState.backward || 
                          inputState.strafeLeft || inputState.strafeRight;
-                         
+        
+        // Handle state transitions for jumping/falling
         if (!onSurface) {
             // Player is in the air
             if (verticalVelocity > 0) {
-                // Rising - play jump animation
-                this.play('jump');
+                // Rising - play jump animation (only if we're not already jumping)
+                if (!this.isJumping) {
+                    this.play('jump');
+                    this.isJumping = true;
+                    this.isFalling = false;
+                }
             } else {
-                // Falling - play fly/fall animation
-                this.play('fly');
+                // Falling - play fly/fall animation (only if we're not already falling)
+                if (!this.isFalling && !this.isJumping) {
+                    this.play('fly');
+                    this.isFalling = true;
+                }
+                
+                // If we're transitioning from jumping to falling, we need to detect that
+                if (this.isJumping && verticalVelocity < -2.0) {
+                    this.isJumping = false;
+                    this.isFalling = true;
+                    this.play('fly');
+                }
             }
-        } else if (isMoving) {
-            // Player is moving on ground - play running animation
-            this.play('running');
         } else {
-            // Player is stationary - play idle animation
-            this.play('idle');
+            // Player has landed
+            if (this.isJumping || this.isFalling) {
+                // Reset jump/fall states
+                this.isJumping = false;
+                this.isFalling = false;
+                
+                // Transition to appropriate grounded animation
+                if (isMoving) {
+                    this.play('running');
+                } else {
+                    this.play('idle');
+                }
+            } else {
+                // Normal ground movement
+                if (isMoving && this.currentAnimationName !== 'running') {
+                    this.play('running');
+                } else if (!isMoving && this.currentAnimationName !== 'idle') {
+                    this.play('idle');
+                }
+            }
         }
     }
 }
