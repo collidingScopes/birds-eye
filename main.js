@@ -294,8 +294,8 @@ async function initialize() {
     FrustumCuller = result.FrustumCuller;
     console.log("Cesium initialized");
     
-    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);
+    // viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
+    viewer.scene.globe.baseColor = new Cesium.Color(0.2, 0.2, 0.2, 1.0);
     
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
