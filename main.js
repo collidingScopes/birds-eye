@@ -260,13 +260,16 @@ function update(currentTime) {
     // --- 8. Update Mini-map ---
     miniMap.update(playerPosition, playerHeading);
 
+    // IMPORTANT: First render Cesium (the base map)
+    viewer.scene.globe.show = true;
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
+    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0); // Visible base color
+    viewer.render();
+
+    // Then render Three.js objects on top
     if (three.renderer && three.scene && three.camera) {
         three.renderer.render(three.scene, three.camera);
     }
-
-    // Finally, render Cesium on top
-    viewer.scene.backgroundColor = new Cesium.Color(0.7, 0.85, 0.95, 1);
-    viewer.render();
 
     // --- 10. Update Instructions Display ---
     const heightInfo = ` (Altitude: ${playerPosition.height.toFixed(1)}m)`;
@@ -289,15 +292,16 @@ async function initialize() {
     console.log("Cesium initialized");
     
     // viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    viewer.scene.globe.baseColor = new Cesium.Color(0.45, 0.45, 0.45, 1.0);
+    //viewer.scene.globe.baseColor = new Cesium.Color(0.45, 0.45, 0.45, 1.0);
     
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
     if (viewer.scene.sun) viewer.scene.sun.show = false;
     if (viewer.scene.moon) viewer.scene.moon.show = false;
     
-    three.renderer.setClearColor(0x000000, 0);
-    
+    three.renderer.setClearColor(0x000000, 0); // Transparent background
+    three.renderer.autoClear = false; // Don't clear what Cesium has rendered
+        
     // Make sure Cesium sky elements are disabled
     viewer.scene.skyBox = undefined;
     viewer.scene.skyAtmosphere = undefined;

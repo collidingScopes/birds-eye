@@ -142,6 +142,15 @@ export function initCesium() {
     const tilesMaximumScreenSpaceError = 50;
     const enableFrustumCulling = true;
     
+    // Create a Sentinel-2 imagery provider
+    const sentinel2Provider = new Cesium.IonImageryProvider({
+        assetId: 3954, // Sentinel-2 imagery on Cesium Ion
+        maximumLevel: 14, // Increased maximum level for better detail
+        rectangle: Cesium.Rectangle.fromDegrees(-180.0, -90.0, 180.0, 90.0), // Global coverage
+        enablePickFeatures: false, // Disable picking for better performance
+        credits: undefined // Optional: Simplify credits display
+    });
+    
     const viewer = new Cesium.Viewer('cesiumContainer', {
         animation: false,
         fullscreenButton: false,
@@ -157,13 +166,38 @@ export function initCesium() {
         maximumScreenSpaceError: tilesMaximumScreenSpaceError,
         requestRenderMode: false,
         baseLayerPicker: false,
-        // Create the skyBox, atmosphere, etc. but we'll hide them after creation
         contextOptions: {
             webgl: {
                 alpha: true
             }
         }
     });
+
+    // Add the Sentinel-2 imagery asynchronously
+    (async () => {
+        try {
+            const imageryLayer = viewer.imageryLayers.addImageryProvider(
+                await Cesium.IonImageryProvider.fromAssetId(3954)
+            );
+            await viewer.zoomTo(imageryLayer);
+        } catch (error) {
+            console.log(error);
+        }
+    })();
+      
+    // After viewer creation, verify and adjust the imagery layers:
+    console.log("Imagery layers count:", viewer.imageryLayers.length);
+    if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
+        const baseLayer = viewer.imageryLayers.get(0);
+        
+        // Ensure layer isn't accidentally hidden or modified
+        baseLayer.show = true;
+        baseLayer.alpha = 1.0;
+        
+        // Apply enhancements for visibility
+        baseLayer.brightness = 2.0;  // Increase brightness
+        baseLayer.contrast = 1.2;    // Increase contrast
+    }
 
     // Check if sky objects exist before trying to hide them
     if (viewer.scene.skyBox) {
@@ -184,11 +218,22 @@ export function initCesium() {
     
     // Set a transparent background
     viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);
+    
+    // Set globe base color to be transparent when no imagery is available
+    viewer.scene.globe.baseColor = new Cesium.Color(1, 1, 1, 0.0);
 
-    // Remove default base imagery layer
+    // DO NOT remove imagery layers - this was causing the issue
+    // This section has been removed/commented out
+    // if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
+    //     viewer.imageryLayers.removeAll();
+    // }
+
+    // Enhance the imagery appearance
     if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
-        viewer.imageryLayers.removeAll();
+        const baseLayer = viewer.imageryLayers.get(0);
+        baseLayer.brightness = 1.1;  // Slightly brighter
+        baseLayer.contrast = 1.1;    // Slightly more contrast
+        baseLayer.gamma = 1.05;      // Slightly adjust gamma
     }
 
     // === DISABLE ALL CESIUM CONTROLS ===
@@ -278,24 +323,33 @@ export function initCesium() {
         setTimeout(() => FrustumCuller.init(cesiumCamera), 100);
     }
 
-    // Critical settings for proper transparency
+    // Critical settings for proper imagery display
     viewer.scene.globe.enableLighting = false;   // Disable lighting to prevent color shifts
-    viewer.scene.fog.enabled = false;            // Disable fog to prevent it from blocking sky
-    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);  // Transparent background
+    viewer.scene.fog.enabled = false;            // Disable fog to prevent it from blocking view
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);  // Transparent background for the sky
     viewer.scene.globe.showGroundAtmosphere = false;  // Disable ground atmosphere
-    // viewer.scene.orderIndependentTranslucency = false; // Disable OIT for better performance
 
-    // Set globe transparency for blending with sky
-    const globeTransparency = 1.0; // Fully opaque terrain
+    // IMPORTANT - Set this to a visible color instead of transparent
+    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);  
+
+    // Make sure globe is visible and properly configured
     viewer.scene.globe.translucency.enabled = false; // Don't need globe translucency
-    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, globeTransparency);
+    viewer.scene.globe.show = true;  // Ensure the globe is visible
+
+    // Make sure imagery is properly loaded and shown
+    if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
+        const baseLayer = viewer.imageryLayers.get(0);
+        baseLayer.alpha = 1.0;  // Ensure 100% opacity
+        baseLayer.brightness = 1.1;  // Slightly brighter
+        baseLayer.contrast = 1.1;    // Slightly more contrast
+        baseLayer.gamma = 1.05;      // Slightly adjust gamma
+    }
 
     // Make sure no leftover atmosphere exists
     viewer.scene.skyAtmosphere = undefined;
 
     return { viewer, cesiumCamera, FrustumCuller };
 }
-
 /**
  * Loads the OSM Buildings tileset with pastel glass appearance
  * @param {Object} viewer - Cesium viewer instance
