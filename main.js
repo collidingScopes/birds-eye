@@ -143,7 +143,8 @@ async function initialize() {
         console.log("Initial setup complete. Starting update loop.");
         
         cameraSystem.teleport(playerPosition, playerHeading, 0);
-        
+        cameraSystem.syncThreeCamera();
+
         lastTime = performance.now();
         requestAnimationFrame(update);
     } catch (error) {

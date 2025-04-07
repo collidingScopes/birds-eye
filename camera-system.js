@@ -262,6 +262,8 @@ export class CameraSystem {
                 },
                 duration: duration
             });
+            // Add explicit sync after flight completes
+            setTimeout(() => this.syncThreeCamera(), duration * 1000);
         } else {
             this.cesiumCamera.position = finalCameraPos;
             this.cesiumCamera.direction = finalDirection;
