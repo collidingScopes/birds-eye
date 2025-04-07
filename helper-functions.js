@@ -115,12 +115,11 @@ export function setupInputListeners(inputState, playerPosition, verticalVelocity
             case 'S': inputState.backward = true; break;
             case 'A': inputState.strafeLeft = true; break;
             case 'D': inputState.strafeRight = true; break;
-            // --- Camera/Player Turning (Arrows) ---
+            // --- Camera Controls (Arrows) - These only affect camera, not player ---
             case 'ARROWLEFT': inputState.left = true; break; // Camera turn Left
             case 'ARROWRIGHT': inputState.right = true; break; // Camera turn Right
-            // --- Camera Pitch (Arrows) ---
-            case 'ARROWUP': inputState.up = true; break;
-            case 'ARROWDOWN': inputState.down = true; break;
+            case 'ARROWUP': inputState.up = true; break; // Camera pitch up
+            case 'ARROWDOWN': inputState.down = true; break; // Camera pitch down
             case ' ': inputState.jump = true; break; // Mark intent to jump
             default: handled = false; break; // Don't prevent default for other keys
         }
@@ -172,7 +171,7 @@ export function setupInputListeners(inputState, playerPosition, verticalVelocity
             if (cameraSystemInstance) {
                 // Teleport camera to new position with a smooth flight animation
                 // Pass the new player heading so camera starts facing the same way
-                cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.5); // 1.5 second flight
+                cameraSystemInstance.teleport(playerPosition, cameraSystemInstance.getHeading(), 1.5); // 1.5 second flight
             } else {
                 console.error("Camera System not available for teleport.");
                 // Legacy fallback (Consider removing if CameraSystem is always used)

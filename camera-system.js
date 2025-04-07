@@ -1,6 +1,7 @@
 /**
- * CameraSystem class
+ * CameraSystem class - FIXED
  * Manages camera positioning, orientation, and controls for third-person view
+ * With fixes for player-camera separation and proper rotation
  */
 export class CameraSystem {
     /**
@@ -10,7 +11,7 @@ export class CameraSystem {
      * @param {number} defaultDistance - The default distance from player to camera
      * @param {number} defaultHeight - The default height offset for the camera
      */
-    constructor(cesiumCamera, threeCamera, defaultDistance = 8.0, defaultHeight = 2.0) {
+    constructor(cesiumCamera, threeCamera, defaultDistance, defaultHeight) {
         this.cesiumCamera = cesiumCamera;
         this.threeCamera = threeCamera;
         this.cameraDistance = defaultDistance;
@@ -18,12 +19,15 @@ export class CameraSystem {
 
         // Camera controls
         this.cameraHeading = 0.0; // Radians, clockwise from North
-        this.cameraPitch = Cesium.Math.toRadians(-15.0); // Initial look-down angle
+        this.cameraPitch = Cesium.Math.toRadians(0.0); // Initial look-down angle
 
         // Frame of reference transforms
         this.playerWorldPos = new Cesium.Cartesian3();
         this.enuTransform = new Cesium.Matrix4();
         this.cameraWorldPos = new Cesium.Cartesian3();
+        
+        // ThreeJS specific properties
+        this.threeOffset = { x: 0, y: -this.cameraDistance, z: this.cameraHeight };
     }
 
     /**
@@ -45,6 +49,7 @@ export class CameraSystem {
         this.enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(this.playerWorldPos);
 
         // 3. Calculate camera offset in local ENU frame based on camera heading/pitch
+        // Note: Camera heading is independent of player heading
         const headingOffset = Math.PI; // 180 degrees to position behind the player relative to camera heading
 
         // Calculate camera position using spherical coordinates relative to player
@@ -106,29 +111,73 @@ export class CameraSystem {
         );
         Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
 
-
         // 8. Synchronize Three.js camera with Cesium camera
         this.syncThreeCamera();
     }
 
     /**
      * Synchronizes the Three.js camera with the Cesium camera
+     * Uses a fixed approach that properly maintains the player model visibility and orientation
      */
     syncThreeCamera() {
         if (this.threeCamera) {
             // Get Cesium's view and projection matrices
             const cvm = this.cesiumCamera.viewMatrix;
             const cpm = this.cesiumCamera.frustum.projectionMatrix;
-
-            // Apply to Three.js camera
-            this.threeCamera.matrixWorldInverse.fromArray(cvm); // View matrix is inverse of world matrix
+            
+            // Apply projection matrix to Three.js camera
             this.threeCamera.projectionMatrix.fromArray(cpm);
-
-            // Calculate world matrix from inverse view matrix
-            this.threeCamera.matrixWorld.copy(this.threeCamera.matrixWorldInverse).invert();
-
-            // Disable automatic matrix updates for the Three.js camera
-            this.threeCamera.matrixAutoUpdate = false;
+            
+            // First, ensure the camera has the right frustum settings
+            if (this.threeCamera.isPerspectiveCamera) {
+                const cesiumFrustum = this.cesiumCamera.frustum;
+                if (cesiumFrustum.fov) {
+                    this.threeCamera.fov = Cesium.Math.toDegrees(cesiumFrustum.fov);
+                }
+                if (cesiumFrustum.near) {
+                    this.threeCamera.near = cesiumFrustum.near;
+                }
+                if (cesiumFrustum.far) {
+                    this.threeCamera.far = cesiumFrustum.far;
+                }
+                this.threeCamera.updateProjectionMatrix();
+            }
+            
+            // Fix: Position the Three.js camera without affecting player model orientation
+            const distance = this.cameraDistance;
+            
+            // Position camera behind the player model (at origin)
+            // We'll keep the player model upright regardless of camera rotation
+            this.threeCamera.position.set(
+                0, 
+                -distance, 
+                this.cameraHeight
+            );
+            
+            // Look at the player model (at origin)
+            this.threeCamera.lookAt(0, 0, 0);
+            
+            // Apply pitch
+            this.threeCamera.position.y = -Math.cos(this.cameraPitch) * distance;
+            this.threeCamera.position.z = this.cameraHeight + Math.sin(this.cameraPitch) * distance;
+            
+            // Apply heading by rotating the camera around the player
+            // This is done by rotating the camera position around the Y axis
+            const x = this.threeCamera.position.x;
+            const y = this.threeCamera.position.y;
+            
+            const cos = Math.cos(-this.cameraHeading);
+            const sin = Math.sin(-this.cameraHeading);
+            
+            this.threeCamera.position.x = x * cos - y * sin;
+            this.threeCamera.position.y = x * sin + y * cos;
+            
+            // Make sure the camera is still looking at the player
+            this.threeCamera.lookAt(0, 0, 0);
+            
+            // Update the camera matrices
+            this.threeCamera.updateMatrix();
+            this.threeCamera.updateMatrixWorld();
         }
     }
 
@@ -172,8 +221,8 @@ export class CameraSystem {
         if (changed) {
             this.cameraPitch = Cesium.Math.clamp(
                 this.cameraPitch,
-                Cesium.Math.toRadians(-60.0), // Allow looking down more
-                Cesium.Math.toRadians(30.0)   // Allow looking up a bit
+                Cesium.Math.toRadians(-45.0), // Allow looking down more
+                Cesium.Math.toRadians(45.0)   // Allow looking up a bit
             );
         }
 
@@ -201,9 +250,6 @@ export class CameraSystem {
      * @returns {Cesium.Matrix4} The ENU transform matrix
      */
     getEnuTransform() {
-        // Ensure the transform is up-to-date if called externally
-        // If update() hasn't run recently, this might be stale
-        // Consider recalculating if needed, or ensure update() runs first
         return this.enuTransform;
     }
 

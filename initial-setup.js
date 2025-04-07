@@ -16,9 +16,7 @@ export async function initThree() {
     const scene = new THREE.Scene();
     const canvas = document.getElementById('threeCanvas');
 
-    //const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 5, 50000);
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
-
     three.camera = camera;
 
     const renderer = new THREE.WebGLRenderer({
@@ -44,14 +42,27 @@ export async function initThree() {
     try {
         const gltf = await loader.loadAsync('assets/panda3DModel8.glb');
         const playerMesh = gltf.scene;
-
-        playerMesh.scale.set(1, 1, 1); // Adjust scale as needed
-        playerMesh.position.set(0, 0, 0);
+        
+        // Center the model properly
+        const box = new THREE.Box3().setFromObject(playerMesh);
+        const center = box.getCenter(new THREE.Vector3());
+        playerMesh.position.x = -center.x;
+        playerMesh.position.y = -center.y;
+        playerMesh.position.z = -center.z;
+        
+        // Adjust scale as needed (may need to be tweaked)
+        const scale = 1.0; // Adjust this value as needed
+        playerMesh.scale.set(scale, scale, scale);
+        
+        // Set initial rotation to face North (adjust if needed)
+        playerMesh.rotation.y = 0;
+        
         scene.add(playerMesh);
         three.playerMesh = playerMesh;
         console.log("GLB player model loaded successfully.");
     } catch (error) {
         console.error("Failed to load GLB model:", error);
+        // Fallback to cylinder (as in your original code)
         const radius = 0.3;
         const height = 5.0;
         const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);
@@ -75,16 +86,58 @@ export async function initThree() {
  * @returns {Object} Cesium viewer and camera
  */
 export function initCesium() {
+    // Performance Settings
+    const tilesMaximumScreenSpaceError = 50;
+    const enableFrustumCulling = true;
+    
     const viewer = new Cesium.Viewer('cesiumContainer', {
-        animation: false, baseLayerPicker: false, fullscreenButton: false, geocoder: false,
-        homeButton: false, infoBox: false, sceneModePicker: false, selectionIndicator: false,
-        timeline: false, navigationHelpButton: false, scene3DOnly: true,
+        animation: false,
+        fullscreenButton: false,
+        geocoder: false,
+        homeButton: false, 
+        infoBox: false, 
+        sceneModePicker: false, 
+        selectionIndicator: false,
+        timeline: false, 
+        navigationHelpButton: false, 
+        scene3DOnly: true,
         useDefaultRenderLoop: false,
         maximumScreenSpaceError: tilesMaximumScreenSpaceError,
         requestRenderMode: false,
-        infoBox: false,
-        selectionIndicator: false
+        baseLayerPicker: false,
+        // Create the skyBox, atmosphere, etc. but we'll hide them after creation
+        contextOptions: {
+            webgl: {
+                alpha: true
+            }
+        }
     });
+
+    // Check if sky objects exist before trying to hide them
+    if (viewer.scene.skyBox) {
+        viewer.scene.skyBox.show = false;
+    }
+    
+    if (viewer.scene.skyAtmosphere) {
+        viewer.scene.skyAtmosphere.show = false;
+    }
+    
+    if (viewer.scene.sun) {
+        viewer.scene.sun.show = false;
+    }
+    
+    if (viewer.scene.moon) {
+        viewer.scene.moon.show = false;
+    }
+    
+    // Set a transparent background
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
+    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);
+
+    // Remove default base imagery layer
+    if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
+        viewer.imageryLayers.removeAll();
+    }
 
     viewer.scene.screenSpaceCameraController.enableInputs = false;
     viewer.scene.globe.depthTestAgainstTerrain = true;
@@ -122,6 +175,21 @@ export function initCesium() {
     if (enableFrustumCulling) {
         setTimeout(() => FrustumCuller.init(cesiumCamera), 100);
     }
+
+    // Critical settings for proper transparency
+    viewer.scene.globe.enableLighting = false;   // Disable lighting to prevent color shifts
+    viewer.scene.fog.enabled = false;            // Disable fog to prevent it from blocking sky
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);  // Transparent background
+    viewer.scene.globe.showGroundAtmosphere = false;  // Disable ground atmosphere
+    // viewer.scene.orderIndependentTranslucency = false; // Disable OIT for better performance
+
+    // Set globe transparency for blending with sky
+    const globeTransparency = 1.0; // Fully opaque terrain
+    viewer.scene.globe.translucency.enabled = false; // Don't need globe translucency
+    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, globeTransparency);
+
+    // Make sure no leftover atmosphere exists
+    viewer.scene.skyAtmosphere = undefined;
 
     return { viewer, cesiumCamera, FrustumCuller };
 }
