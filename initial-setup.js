@@ -134,7 +134,7 @@ export async function initThree() {
 }
 
 /**
- * Initializes the Cesium viewer
+ * Initializes the Cesium viewer with all camera controls completely disabled
  * @returns {Object} Cesium viewer and camera
  */
 export function initCesium() {
@@ -191,7 +191,57 @@ export function initCesium() {
         viewer.imageryLayers.removeAll();
     }
 
+    // === DISABLE ALL CESIUM CONTROLS ===
+    // 1. Disable the screenSpaceCameraController completely
+    viewer.scene.screenSpaceCameraController.enableRotate = false;
+    viewer.scene.screenSpaceCameraController.enableTranslate = false;
+    viewer.scene.screenSpaceCameraController.enableZoom = false;
+    viewer.scene.screenSpaceCameraController.enableTilt = false;
+    viewer.scene.screenSpaceCameraController.enableLook = false;
     viewer.scene.screenSpaceCameraController.enableInputs = false;
+    
+    // 2. Block direct mouse/touch events on the Cesium container
+    const cesiumContainer = document.getElementById('cesiumContainer');
+    if (cesiumContainer) {
+        // List of events to prevent default behavior
+        const eventsToBlock = [
+            'wheel', 'mousedown', 'mousemove', 'mouseup', 
+            'touchstart', 'touchmove', 'touchend'
+        ];
+        
+        eventsToBlock.forEach(eventType => {
+            cesiumContainer.addEventListener(eventType, (event) => {
+                // Allow events for UI elements like city selector
+                if (event.target.id === 'citySelector' || 
+                    event.target.id === 'instructions' || 
+                    event.target.id === 'fpsCounter') {
+                    return;
+                }
+                // Block event propagation and default behavior
+                event.stopPropagation();
+                event.preventDefault();
+            }, { passive: false });
+        });
+    }
+    
+    // 3. Add CSS to disable pointer events on Cesium elements
+    const style = document.createElement('style');
+    style.textContent = `
+        #cesiumContainer .cesium-viewer-cesiumWidgetContainer {
+            pointer-events: none;
+        }
+        #citySelector, #instructions, #fpsCounter, #animationInfo {
+            pointer-events: auto;
+        }
+        #cesiumContainer canvas {
+            pointer-events: none;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    console.log("All Cesium camera controls have been disabled");
+    // === END DISABLE CONTROLS ===
+
     viewer.scene.globe.depthTestAgainstTerrain = true;
     const cesiumCamera = viewer.camera;
 
@@ -293,8 +343,8 @@ export async function loadOsmBuildings(viewer, instructionsElement) {
                     // Alpha is set to create transparency effect (0.65 = 35% transparent)
                     return Cesium.Color.fromHsl(
                         hue / 360.0,     // Hue (normalized 0-1)
-                        1.0,             // Saturation (lower for more pastel look)
-                        0.8,            // Lightness (higher for more pastel look)
+                        0.5,             // Saturation (lower for more pastel look)
+                        0.98,            // Lightness (higher for more pastel look)
                         1.0,            // Alpha (65% opaque)
                         result
                     );

@@ -295,7 +295,7 @@ async function initialize() {
     console.log("Cesium initialized");
     
     // viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    viewer.scene.globe.baseColor = new Cesium.Color(0.2, 0.2, 0.2, 1.0);
+    viewer.scene.globe.baseColor = new Cesium.Color(0.45, 0.45, 0.45, 1.0);
     
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
@@ -356,34 +356,6 @@ async function initialize() {
         instructionsElement.style.color = 'red';
     }
 }
-
-/**
-/**
- * Preloads necessary textures for FBX models
- * This helps ensure textures are available when the model loads
- */
-function preloadTextures() {
-    // List of textures used by the FBX models (if any)
-    const textureUrls = [
-        // Add texture paths here if your FBX model requires specific textures
-    ];
-    
-    // Preload each texture
-    const textureLoader = new THREE.TextureLoader();
-    textureUrls.forEach(url => {
-        textureLoader.load(url, 
-            // Success callback
-            texture => console.log(`Preloaded texture: ${url}`),
-            // Progress callback
-            undefined,
-            // Error callback
-            error => console.warn(`Failed to preload texture ${url}:`, error)
-        );
-    });
-}
-
-// Call preload before initialization if needed
-// preloadTextures();
 
 // --- Window Resize Handling ---
 window.addEventListener('resize', () => {

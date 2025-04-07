@@ -34,3 +34,8 @@ Can we do some caching in local storage to reduce bing maps sessions / data stre
 
 Deploy on vercel or netlify so that I can keep the token private
 
+Add trees and other natural features in threejs
+
+mobile support -- nipple.js
+
+Refactor and improve code for fps
