@@ -21,8 +21,8 @@ import { TerrainManager } from './terrain-manager.js';
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
 
 // --- State Variables ---
-// DRAMATIC FALL: Set initial height much higher (1000m above ground)
-const INITIAL_DROP_HEIGHT = 2000; 
+// DRAMATIC FALL: Set initial height much higher
+const INITIAL_DROP_HEIGHT = 2500; 
 let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight + INITIAL_DROP_HEIGHT);
 let terrainManager;
 
@@ -226,7 +226,7 @@ function update(currentTime) {
         }
     } else {
         // DRAMATIC FALL: During fall, gradually adjust camera pitch to look more at the ground
-        const fallProgress = Math.min((currentTime - fallStartTime) / 8000, 1.0); // 8 seconds to reach max look-down
+        const fallProgress = Math.min((currentTime - fallStartTime) / 10000, 1.0); // 10 seconds to reach max look-down
         cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45); // Gradually pitch from 10 to 50 degrees
         needsRender = true;
     }
