@@ -1,9 +1,8 @@
 export const playerMoveSpeed = 100.0;
 export const cameraTurnSpeed = 2.0;
-export const cameraDistance = 10.0; // Adjusted for third-person
 export const jumpVelocity = 50;
 export const gravity = -50.0;
-export const groundHeight = 10.0;
+export const groundHeight = 0.5;
 
 // City Coordinates
 export const cities = {

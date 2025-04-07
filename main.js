@@ -247,7 +247,8 @@ function update(currentTime) {
 
     // --- 6. Update Three.js Player Mesh Orientation and Position ---
     if (three.playerMesh) {
-        three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
+        // three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
+        three.playerMesh.rotation.set(0, Math.PI - playerHeading, 0);
         three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
         
         // Update animations based on player state
@@ -287,14 +288,7 @@ function update(currentTime) {
     const heightInfo = ` (Altitude: ${playerPosition.height.toFixed(1)}m)`;
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
     
-    // Add animation info to display
-    let animationInfo = "";
-    if (three.animationSystem && three.animationSystem.currentAction) {
-        const actionName = three.animationSystem.currentAction.getClip().name;
-        animationInfo = ` | Animation: ${actionName}`;
-    }
-    
-    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}${animationInfo}`;
+    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
 }
 
 /**
@@ -358,7 +352,7 @@ async function initialize() {
     changeTimeOfDay('day');
     console.log("Sky gradient initialized");
     
-    cameraSystem = new CameraSystem(cesiumCamera, three.camera, 10.0, 0.1);
+    cameraSystem = new CameraSystem(cesiumCamera, three.camera);
     console.log("Camera system initialized");
     
     miniMap = new MiniMap(1000);

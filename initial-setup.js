@@ -52,7 +52,7 @@ export async function initThree() {
     try {
         const fbx = await loader.loadAsync('assets/pandaFBX/panda.fbx');
         const playerMesh = fbx;
-        
+
         // Add debugging to check model details
         console.log("FBX model details:", {
             children: playerMesh.children.length,
@@ -72,6 +72,9 @@ export async function initThree() {
         
         const scale = 1.2;
         playerMesh.scale.set(scale, scale, scale);
+
+        playerMesh.rotation.set(0, Math.PI, 0); // Rotate 180 degrees so back faces camera
+        playerMesh.position.set(0, -size.y/2, 0); // Adjust to stand on ground
         
         // Make sure the model is visible
         playerMesh.traverse(function(child) {

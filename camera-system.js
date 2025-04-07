@@ -7,18 +7,17 @@ export class CameraSystem {
      * Creates a new camera system
      * @param {Object} cesiumCamera - The Cesium camera instance
      * @param {Object} threeCamera - The Three.js camera instance
-     * @param {number} defaultDistance - The default distance from player to camera
-     * @param {number} defaultHeight - The default height offset for the camera
      */
     constructor(cesiumCamera, threeCamera, defaultDistance, defaultHeight) {
         this.cesiumCamera = cesiumCamera;
         this.threeCamera = threeCamera;
-        this.cameraDistance = defaultDistance;
-        this.cameraHeight = defaultHeight;
+        this.cameraDistance = 15;
+        this.cameraHeight = 2;
+        this.initialCameraPitch = 0; //radians
 
         // Camera controls
         this.cameraHeading = 0.0; // Radians, clockwise from North
-        this.cameraPitch = Cesium.Math.toRadians(0); // Initial slight look-down angle
+        this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch); // Initial slight look-down angle
     }
 
     /**
@@ -204,7 +203,7 @@ export class CameraSystem {
      */
     teleport(playerPosition, playerHeading, duration = 0) {
         this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
-        this.cameraPitch = Cesium.Math.toRadians(0.0);
+        this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch);
 
         const targetPlayerWorldPos = Cesium.Cartesian3.fromRadians(
             playerPosition.longitude,
