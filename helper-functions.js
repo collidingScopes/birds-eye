@@ -1,5 +1,5 @@
 export const playerMoveSpeed = 100.0;
-export const cameraTurnSpeed = 2.0;
+export const cameraTurnSpeed = 1.5;
 export const jumpVelocity = 50;
 export const gravity = -50.0;
 export const groundHeight = 0.5;

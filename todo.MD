@@ -39,3 +39,5 @@ Add trees and other natural features in threejs
 mobile support -- nipple.js
 
 Refactor and improve code for fps
+
+Only re-check buildling collision if moving more than x meters

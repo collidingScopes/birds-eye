@@ -144,11 +144,11 @@ export class CameraSystem {
         }
 
         if (inputState.up) {
-            this.cameraPitch -= turnSpeed * deltaTime * 0.5;
+            this.cameraPitch -= turnSpeed * deltaTime * 0.7;
             changed = true;
         }
         if (inputState.down) {
-            this.cameraPitch += turnSpeed * deltaTime *0.5;
+            this.cameraPitch += turnSpeed * deltaTime * 0.7;
             changed = true;
         }
 

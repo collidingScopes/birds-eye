@@ -246,7 +246,7 @@ function update(currentTime) {
         // three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
         three.playerMesh.rotation.x = Math.PI/2;
         three.playerMesh.rotation.y = Math.PI - playerHeading;
-        three.playerMesh.rotation.z = -playerHeading;
+        three.playerMesh.rotation.z = -playerHeading*0.92;
         
         //three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
         
