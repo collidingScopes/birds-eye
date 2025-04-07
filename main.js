@@ -246,7 +246,7 @@ function update(currentTime) {
         // three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
         three.playerMesh.rotation.x = Math.PI/2;
         three.playerMesh.rotation.y = Math.PI - playerHeading;
-        three.playerMesh.rotation.z = -playerHeading*0.92;
+        three.playerMesh.rotation.z = -playerHeading*0.93;
         
         //three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
         
@@ -260,13 +260,14 @@ function update(currentTime) {
     // --- 8. Update Mini-map ---
     miniMap.update(playerPosition, playerHeading);
 
-    // IMPORTANT: First render Cesium (the base map)
+    // --- Render Logic ---
+
+    //Render Cesium scene
     viewer.scene.globe.show = true;
-    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0); // Visible base color
+    viewer.scene.backgroundColor = new Cesium.Color(0.678, 0.847, 0.902, 1);
     viewer.render();
 
-    // Then render Three.js objects on top
+    // Render Three.js main scene (player, etc.) on top
     if (three.renderer && three.scene && three.camera) {
         three.renderer.render(three.scene, three.camera);
     }
@@ -298,10 +299,7 @@ async function initialize() {
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
     if (viewer.scene.sun) viewer.scene.sun.show = false;
     if (viewer.scene.moon) viewer.scene.moon.show = false;
-    
-    three.renderer.setClearColor(0x000000, 0); // Transparent background
-    three.renderer.autoClear = false; // Don't clear what Cesium has rendered
-        
+
     // Make sure Cesium sky elements are disabled
     viewer.scene.skyBox = undefined;
     viewer.scene.skyAtmosphere = undefined;

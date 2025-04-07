@@ -41,11 +41,6 @@ export async function initThree() {
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     scene.add(ambientLight);
-    /*
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(0, 10, 5);
-    scene.add(directionalLight);
-    */
 
     // Load FBX Model
     const loader = new FBXLoader();
@@ -165,6 +160,7 @@ export function initCesium() {
         useDefaultRenderLoop: false,
         maximumScreenSpaceError: tilesMaximumScreenSpaceError,
         requestRenderMode: false,
+        baselayer: false,
         baseLayerPicker: false,
         contextOptions: {
             webgl: {
