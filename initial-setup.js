@@ -136,16 +136,7 @@ export function initCesium() {
     // Performance Settings
     const tilesMaximumScreenSpaceError = 50;
     const enableFrustumCulling = true;
-    
-    // Create a Sentinel-2 imagery provider
-    const sentinel2Provider = new Cesium.IonImageryProvider({
-        assetId: 3954, // Sentinel-2 imagery on Cesium Ion
-        maximumLevel: 14, // Increased maximum level for better detail
-        rectangle: Cesium.Rectangle.fromDegrees(-180.0, -90.0, 180.0, 90.0), // Global coverage
-        enablePickFeatures: false, // Disable picking for better performance
-        credits: undefined // Optional: Simplify credits display
-    });
-    
+
     const viewer = new Cesium.Viewer('cesiumContainer', {
         animation: false,
         fullscreenButton: false,
@@ -162,6 +153,7 @@ export function initCesium() {
         requestRenderMode: false,
         baselayer: false,
         baseLayerPicker: false,
+        imageryProvider: new Cesium.IonImageryProvider({ assetId: 3954 }),
         contextOptions: {
             webgl: {
                 alpha: true
@@ -169,7 +161,6 @@ export function initCesium() {
         }
     });
 
-    // Add the Sentinel-2 imagery asynchronously
     (async () => {
         try {
             const imageryLayer = viewer.imageryLayers.addImageryProvider(
