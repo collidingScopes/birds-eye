@@ -21,14 +21,17 @@ import { TerrainManager } from './terrain-manager.js';
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
 
 // --- State Variables ---
-let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight);
+// DRAMATIC FALL: Set initial height much higher (1000m above ground)
+const INITIAL_DROP_HEIGHT = 2000; 
+let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight + INITIAL_DROP_HEIGHT);
 let terrainManager;
 
 // Coordinate System Convention:
 // playerHeading & cameraHeading: Radians. Measured CLOCKWISE from NORTH.
 // 0 radians = North, PI/2 = East, PI = South, 3*PI/2 = West
 let playerHeading = Cesium.Math.toRadians(0.0); // Start facing North
-let verticalVelocity = 0.0; // For jumping/gravity
+// DRAMATIC FALL: Start with negative vertical velocity to accelerate the initial drop
+let verticalVelocity = -10.0; 
 
 // Direction vectors in Cesium's East-North-Up (ENU) frame (X=East, Y=North)
 let forwardDirection = { x: 0, y: 1 }; // Initial: North
@@ -46,6 +49,11 @@ const inputState = {
     strafeLeft: false,  // A
     strafeRight: false  // D
 };
+
+// --- DRAMATIC FALL flags ---
+let isInInitialFall = true;
+let initialFallComplete = false;
+let fallStartTime = 0;
 
 // --- Building Detection Cache ---
 const buildingCache = {
@@ -142,9 +150,17 @@ async function initialize() {
         osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
         console.log("Initial setup complete. Starting update loop.");
         
+        // DRAMATIC FALL: Use a special camera setup for the fall
+        // Set camera to look slightly downward at the start of the fall
         cameraSystem.teleport(playerPosition, playerHeading, 0);
         cameraSystem.syncThreeCamera();
-
+        
+        // DRAMATIC FALL: Display special instructions for the dramatic fall
+        instructionsElement.innerHTML = "Entering the city... Brace for impact!";
+        
+        // DRAMATIC FALL: Set the start time for the fall
+        fallStartTime = performance.now();
+        
         lastTime = performance.now();
         requestAnimationFrame(update);
     } catch (error) {
@@ -179,6 +195,11 @@ function update(currentTime) {
     const isPitching = inputState.up || inputState.down;
     const isJumping = inputState.jump;
     const physicsActive = verticalVelocity !== 0 || (playerPosition && playerPosition.height > groundHeight + 0.1);
+    
+    // DRAMATIC FALL: Always render during initial fall
+    if (isInInitialFall) {
+        needsRender = true;
+    }
 
     if (!isMoving && !isTurning && !isPitching && !isJumping && !physicsActive && !needsRender && (currentTime - lastRenderTime < renderInterval)) {
         if (viewer.scene.primitives.length > 0) {
@@ -193,13 +214,21 @@ function update(currentTime) {
     needsRender = false;
 
     // --- 1. Update Camera Controls (Arrow Keys) and synchronize player orientation ---
-    const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
-    if (cameraControlResult.changed) {
+    // DRAMATIC FALL: Disable camera controls during initial fall
+    if (!isInInitialFall) {
+        const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
+        if (cameraControlResult.changed) {
+            needsRender = true;
+            
+            // Synchronize player heading to always face away from camera
+            playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
+            updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
+        }
+    } else {
+        // DRAMATIC FALL: During fall, gradually adjust camera pitch to look more at the ground
+        const fallProgress = Math.min((currentTime - fallStartTime) / 8000, 1.0); // 8 seconds to reach max look-down
+        cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45); // Gradually pitch from 10 to 50 degrees
         needsRender = true;
-        
-        // Synchronize player heading to always face away from camera
-        playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
-        updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
     }
 
     // --- 2. Handle Jumping and Gravity ---
@@ -211,99 +240,130 @@ function update(currentTime) {
     // Check if player is on a surface (ground or building)
     const onSurface = terrainManager.isOnSurface(playerPosition, verticalVelocity, buildingCollision);
 
-    if (inputState.jump) {
-        verticalVelocity = jumpVelocity;
-        playerPosition.height += 0.1;
-        needsRender = true;
-        inputState.jump = false; // Consume jump input
+    // DRAMATIC FALL: Handle the landing from the initial fall
+    if (isInInitialFall && (
+        onSurface || 
+        playerPosition.height <= surfaceHeight || 
+        Math.abs(playerPosition.height - surfaceHeight) < 0.1 ||
+        playerPosition.height <= 0
+    )) {
+        console.log("Initial fall complete! Landing detected.");
+        isInInitialFall = false;
+        initialFallComplete = true;
+        // Ensure player is exactly at surface height
+        playerPosition.height = surfaceHeight;
     }
 
-    verticalVelocity += gravity * deltaTime;
+    // DRAMATIC FALL: During initial fall, increase vertical velocity for more dramatic effect
+    if (isInInitialFall) {
+        verticalVelocity += gravity * deltaTime * 1.5; // 1.5x normal gravity for more dramatic fall
+    } else {
+        // Normal jump handling
+        if (inputState.jump) {
+            verticalVelocity = jumpVelocity;
+            playerPosition.height += 0.1;
+            needsRender = true;
+            inputState.jump = false; // Consume jump input
+        }
+
+        verticalVelocity += gravity * deltaTime;
+    }
+    
     playerPosition.height += verticalVelocity * deltaTime;
 
     if (playerPosition.height < surfaceHeight) {
         playerPosition.height = surfaceHeight;
-        verticalVelocity = 0;
+        
+        // DRAMATIC FALL: Add a small bounce effect when landing from the initial fall
+        if (isInInitialFall || (initialFallComplete && Math.abs(verticalVelocity) > 20)) {
+            verticalVelocity = Math.abs(verticalVelocity) * -0.2; // 20% bounce
+            initialFallComplete = false; // Reset once we've applied the bounce
+        } else {
+            verticalVelocity = 0;
+        }
     }
 
     needsRender = true;
 
     // --- 3. Update Player Horizontal Position (W/S/A/D for Movement) ---
+    // DRAMATIC FALL: Disable movement controls during initial fall
     const moveAmount = playerMoveSpeed * deltaTime;
     let deltaEast = 0;
     let deltaNorth = 0;
     let movedHorizontally = false;
 
-    // Use player heading for movement direction (aligned with camera)
-    const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
-    const movementRight = { x: rightDirection.x, y: rightDirection.y };
+    if (!isInInitialFall) {
+        // Use player heading for movement direction (aligned with camera)
+        const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
+        const movementRight = { x: rightDirection.x, y: rightDirection.y };
 
-    if (inputState.forward) {
-        deltaEast += movementForward.x;
-        deltaNorth += movementForward.y;
-        movedHorizontally = true;
-    }
-    if (inputState.backward) {
-        deltaEast -= movementForward.x;
-        deltaNorth -= movementForward.y;
-        movedHorizontally = true;
-    }
-    if (inputState.strafeLeft) {
-        deltaEast -= movementRight.x;
-        deltaNorth -= movementRight.y;
-        movedHorizontally = true;
-    }
-    if (inputState.strafeRight) {
-        deltaEast += movementRight.x;
-        deltaNorth += movementRight.y;
-        movedHorizontally = true;
-    }
-
-    if (movedHorizontally) {
-        needsRender = true;
-        const magnitude = Math.sqrt(deltaEast * deltaEast + deltaNorth * deltaNorth);
-        let normalizedEast = 0;
-        let normalizedNorth = 0;
-
-        if (magnitude > 1e-6) {
-            normalizedEast = deltaEast / magnitude;
-            normalizedNorth = deltaNorth / magnitude;
+        if (inputState.forward) {
+            deltaEast += movementForward.x;
+            deltaNorth += movementForward.y;
+            movedHorizontally = true;
+        }
+        if (inputState.backward) {
+            deltaEast -= movementForward.x;
+            deltaNorth -= movementForward.y;
+            movedHorizontally = true;
+        }
+        if (inputState.strafeLeft) {
+            deltaEast -= movementRight.x;
+            deltaNorth -= movementRight.y;
+            movedHorizontally = true;
+        }
+        if (inputState.strafeRight) {
+            deltaEast += movementRight.x;
+            deltaNorth += movementRight.y;
+            movedHorizontally = true;
         }
 
-        const finalMoveEast = normalizedEast * moveAmount;
-        const finalMoveNorth = normalizedNorth * moveAmount;
+        if (movedHorizontally) {
+            needsRender = true;
+            const magnitude = Math.sqrt(deltaEast * deltaEast + deltaNorth * deltaNorth);
+            let normalizedEast = 0;
+            let normalizedNorth = 0;
 
-        const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
-        const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
-        const moveENU = new Cesium.Cartesian3(finalMoveEast, finalMoveNorth, 0);
-        const moveECEF = Cesium.Matrix4.multiplyByPointAsVector(enuTransform, moveENU, new Cesium.Cartesian3());
-        const newWorldPos = Cesium.Cartesian3.add(playerWorldPos, moveECEF, new Cesium.Cartesian3());
-        const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
+            if (magnitude > 1e-6) {
+                normalizedEast = deltaEast / magnitude;
+                normalizedNorth = deltaNorth / magnitude;
+            }
 
-        let allowMove = true;
-        if (allowMove) {
-            playerPosition.longitude = newCartographic.longitude;
-            playerPosition.latitude = newCartographic.latitude;
+            const finalMoveEast = normalizedEast * moveAmount;
+            const finalMoveNorth = normalizedNorth * moveAmount;
 
-            if (onSurface && buildingCollision.hit) {
-                const newPositionCheck = {
-                    longitude: playerPosition.longitude,
-                    latitude: playerPosition.latitude,
-                    height: playerPosition.height
-                };
-                const tempCache = { valid: false, hit: false, height: 0 };
-                const forcedInputState = { forward: true };
-                const newBuildingCollision = checkBuildingCollision(
-                    viewer,
-                    newPositionCheck,
-                    osmBuildingsTileset,
-                    forcedInputState,
-                    tempCache,
-                    0
-                );
-                
-                if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
-                    verticalVelocity = -0.1;
+            const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
+            const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
+            const moveENU = new Cesium.Cartesian3(finalMoveEast, finalMoveNorth, 0);
+            const moveECEF = Cesium.Matrix4.multiplyByPointAsVector(enuTransform, moveENU, new Cesium.Cartesian3());
+            const newWorldPos = Cesium.Cartesian3.add(playerWorldPos, moveECEF, new Cesium.Cartesian3());
+            const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
+
+            let allowMove = true;
+            if (allowMove) {
+                playerPosition.longitude = newCartographic.longitude;
+                playerPosition.latitude = newCartographic.latitude;
+
+                if (onSurface && buildingCollision.hit) {
+                    const newPositionCheck = {
+                        longitude: playerPosition.longitude,
+                        latitude: playerPosition.latitude,
+                        height: playerPosition.height
+                    };
+                    const tempCache = { valid: false, hit: false, height: 0 };
+                    const forcedInputState = { forward: true };
+                    const newBuildingCollision = checkBuildingCollision(
+                        viewer,
+                        newPositionCheck,
+                        osmBuildingsTileset,
+                        forcedInputState,
+                        tempCache,
+                        0
+                    );
+                    
+                    if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
+                        verticalVelocity = -0.1;
+                    }
                 }
             }
         }
@@ -334,10 +394,7 @@ function update(currentTime) {
         // X-axis (pitch): Adjust based on camera pitch to keep feet down
         three.playerMesh.rotation.x = Math.PI/2 + cameraPitch;
 
-        //console.log(playerHeading);
-        //console.log(cameraPitch);
-
-       // Normalize playerHeading to [-π, π]
+        // Normalize playerHeading to [-π, π]
         function normalizeAngle(angle) {
             return Math.atan2(Math.sin(angle), Math.cos(angle));
         }
@@ -383,7 +440,6 @@ function update(currentTime) {
     // --- 10. Update Instructions Display ---
     const heightInfo = ` (Altitude: ${playerPosition.height.toFixed(1)}m)`;
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
-    
     instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
 }
 
