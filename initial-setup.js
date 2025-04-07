@@ -171,6 +171,28 @@ export function initCesium() {
             console.log(error);
         }
     })();
+
+    (async () => {
+        try {
+          const terrainProvider = await Cesium.createWorldTerrainAsync({
+            requestWaterMask: true,
+            requestVertexNormals: true
+          });
+          viewer.terrainProvider = terrainProvider;
+          console.log("Cesium World Terrain successfully initialized");
+          
+          // Ensure terrain is enabled with correct settings
+          viewer.scene.globe.enableLighting = false;
+          viewer.scene.globe.depthTestAgainstTerrain = true;
+          viewer.scene.logarithmicDepthBuffer = false; // Try disabling for better terrain rendering
+          
+          // Set terrain exaggeration to make elevation more visible if needed
+          // viewer.scene.verticalExaggeration = 1.5; // Optional: exaggerate heights by 50%
+          
+        } catch (error) {
+          console.error("Failed to initialize Cesium World Terrain:", error);
+        }
+    })();
       
     // After viewer creation, verify and adjust the imagery layers:
     console.log("Imagery layers count:", viewer.imageryLayers.length);

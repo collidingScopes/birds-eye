@@ -15,12 +15,14 @@ import {
 import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
 import { AnimationSystem } from './animation-system.js';
+import { TerrainManager } from './terrain-manager.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
 
 // --- State Variables ---
 let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight);
+let terrainManager;
 
 // Coordinate System Convention:
 // playerHeading & cameraHeading: Radians. Measured CLOCKWISE from NORTH.
@@ -70,6 +72,86 @@ let lastTime = 0;
 const renderInterval = 1000 / 60; // Target 60 FPS
 let lastRenderTime = 0;
 let needsRender = true;
+
+// --- Initialization Sequence ---
+async function initialize() {
+    console.log("Starting initialization sequence...");
+    
+    three = await initThree();
+    console.log("Three.js initialized");
+    
+    const result = initCesium();
+    viewer = result.viewer;
+    cesiumCamera = result.cesiumCamera;
+    FrustumCuller = result.FrustumCuller;
+    console.log("Cesium initialized");
+
+    // Create terrain manager with default ground height
+    terrainManager = new TerrainManager(viewer, groundHeight);
+    console.log("Terrain manager initialized");
+    
+    // viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
+    //viewer.scene.globe.baseColor = new Cesium.Color(0.45, 0.45, 0.45, 1.0);
+    
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
+    if (viewer.scene.sun) viewer.scene.sun.show = false;
+    if (viewer.scene.moon) viewer.scene.moon.show = false;
+
+    // Make sure Cesium sky elements are disabled
+    viewer.scene.skyBox = undefined;
+    viewer.scene.skyAtmosphere = undefined;
+    viewer.scene.sun = undefined;
+    viewer.scene.moon = undefined;
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
+    
+    // Make sure Three.js renderer has proper settings
+    three.renderer.setClearColor(0x000000, 0);
+    three.renderer.autoClear = false;
+        
+    cameraSystem = new CameraSystem(cesiumCamera, three.camera);
+    console.log("Camera system initialized");
+    
+    miniMap = new MiniMap(1000);
+    
+    updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
+    
+    const verticalVelocityRef = { value: verticalVelocity };
+    const playerHeadingRef = { value: playerHeading };
+    
+    setupInputListeners(
+        inputState, 
+        playerPosition, 
+        verticalVelocityRef,
+        playerHeadingRef,
+        updateDirectionVectors, 
+        forwardDirection, 
+        rightDirection, 
+        cities, 
+        viewer, 
+        miniMap, 
+        cameraSystem,
+        terrainManager,  // Pass the terrain manager as a new parameter
+        instructionsElement  // Pass the instructions element
+    );
+    
+    verticalVelocity = verticalVelocityRef.value;
+    playerHeading = playerHeadingRef.value;
+        
+    try {
+        osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
+        console.log("Initial setup complete. Starting update loop.");
+        
+        cameraSystem.teleport(playerPosition, playerHeading, 0);
+        
+        lastTime = performance.now();
+        requestAnimationFrame(update);
+    } catch (error) {
+        console.error("Failed to initialize application:", error);
+        instructionsElement.innerHTML = "Failed to initialize. Check console for errors.";
+        instructionsElement.style.color = 'red';
+    }
+}
 
 /**
  * The main update function, called each frame.
@@ -122,13 +204,12 @@ function update(currentTime) {
     // --- 2. Handle Jumping and Gravity ---
     const buildingCollision = checkBuildingCollision(viewer, playerPosition, osmBuildingsTileset, inputState, buildingCache, 20.0);
 
-    let surfaceHeight = groundHeight;
-    if (buildingCollision.hit && buildingCollision.height > groundHeight) {
-        surfaceHeight = buildingCollision.height;
-    }
-    
-    const onSurface = Math.abs(playerPosition.height - surfaceHeight) < 0.5 && verticalVelocity <= 0;
-    
+    // Get the surface height by checking both terrain and buildings
+    const surfaceHeight = terrainManager.getSurfaceHeight(playerPosition, buildingCollision);
+
+    // Check if player is on a surface (ground or building)
+    const onSurface = terrainManager.isOnSurface(playerPosition, verticalVelocity, buildingCollision);
+
     if (inputState.jump) {
         verticalVelocity = jumpVelocity;
         playerPosition.height += 0.1;
@@ -243,12 +324,38 @@ function update(currentTime) {
 
     // --- 6. Update Three.js Player Mesh Orientation and Position ---
     if (three.playerMesh) {
-        // three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
-        three.playerMesh.rotation.x = Math.PI/2;
+        // Get camera pitch from the camera system
+        const cameraPitch = cameraSystem.getPitch();
+
+        // Y-axis (yaw): Align with player heading (opposite camera)
         three.playerMesh.rotation.y = Math.PI - playerHeading;
-        three.playerMesh.rotation.z = -playerHeading*0.93;
-        
-        //three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
+
+        // X-axis (pitch): Adjust based on camera pitch to keep feet down
+        three.playerMesh.rotation.x = Math.PI/2 + cameraPitch;
+
+        //console.log(playerHeading);
+        //console.log(cameraPitch);
+
+       // Normalize playerHeading to [-π, π]
+        function normalizeAngle(angle) {
+            return Math.atan2(Math.sin(angle), Math.cos(angle));
+        }
+
+        // Apply the normalized heading to the rotation
+        if(cameraPitch > 0){
+            three.playerMesh.rotation.z = -normalizeAngle(playerHeading); // Negative to align with typical coordinate systems
+        } else {
+            if(playerHeading>=Math.PI){
+                three.playerMesh.rotation.z = -Math.PI*1.5;
+            } else if(playerHeading>=0){
+                three.playerMesh.rotation.z = -Math.PI/2;
+            } else if (playerHeading>=-Math.PI){
+                three.playerMesh.rotation.z = Math.PI/2;
+            } else {
+                three.playerMesh.rotation.z = Math.PI;
+            }
+        }
+        three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
         
         // Update animations based on player state
         if (three.animationSystem) {
@@ -277,80 +384,6 @@ function update(currentTime) {
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
     
     instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
-}
-
-// --- Initialization Sequence ---
-async function initialize() {
-    console.log("Starting initialization sequence...");
-    
-    three = await initThree();
-    console.log("Three.js initialized");
-    
-    const result = initCesium();
-    viewer = result.viewer;
-    cesiumCamera = result.cesiumCamera;
-    FrustumCuller = result.FrustumCuller;
-    console.log("Cesium initialized");
-    
-    // viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    //viewer.scene.globe.baseColor = new Cesium.Color(0.45, 0.45, 0.45, 1.0);
-    
-    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
-    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
-    if (viewer.scene.sun) viewer.scene.sun.show = false;
-    if (viewer.scene.moon) viewer.scene.moon.show = false;
-
-    // Make sure Cesium sky elements are disabled
-    viewer.scene.skyBox = undefined;
-    viewer.scene.skyAtmosphere = undefined;
-    viewer.scene.sun = undefined;
-    viewer.scene.moon = undefined;
-    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    
-    // Make sure Three.js renderer has proper settings
-    three.renderer.setClearColor(0x000000, 0);
-    three.renderer.autoClear = false;
-        
-    cameraSystem = new CameraSystem(cesiumCamera, three.camera);
-    console.log("Camera system initialized");
-    
-    miniMap = new MiniMap(1000);
-    
-    updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
-    
-    const verticalVelocityRef = { value: verticalVelocity };
-    const playerHeadingRef = { value: playerHeading };
-    
-    setupInputListeners(
-        inputState, 
-        playerPosition, 
-        verticalVelocityRef,
-        playerHeadingRef,
-        updateDirectionVectors, 
-        forwardDirection, 
-        rightDirection, 
-        cities, 
-        viewer, 
-        miniMap, 
-        cameraSystem
-    );
-    
-    verticalVelocity = verticalVelocityRef.value;
-    playerHeading = playerHeadingRef.value;
-        
-    try {
-        osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
-        console.log("Initial setup complete. Starting update loop.");
-        
-        cameraSystem.teleport(playerPosition, playerHeading, 0);
-        
-        lastTime = performance.now();
-        requestAnimationFrame(update);
-    } catch (error) {
-        console.error("Failed to initialize application:", error);
-        instructionsElement.innerHTML = "Failed to initialize. Check console for errors.";
-        instructionsElement.style.color = 'red';
-    }
 }
 
 // --- Window Resize Handling ---

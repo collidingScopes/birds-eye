@@ -7,12 +7,14 @@ export class CameraSystem {
      * Creates a new camera system
      * @param {Object} cesiumCamera - The Cesium camera instance
      * @param {Object} threeCamera - The Three.js camera instance
+     * @param {number} defaultDistance - Default distance from camera to player (optional)
+     * @param {number} defaultHeight - Default height offset of camera (optional)
      */
-    constructor(cesiumCamera, threeCamera, defaultDistance, defaultHeight) {
+    constructor(cesiumCamera, threeCamera, defaultDistance = 13, defaultHeight = 4) {
         this.cesiumCamera = cesiumCamera;
         this.threeCamera = threeCamera;
-        this.cameraDistance = 10;
-        this.cameraHeight = 2;
+        this.cameraDistance = defaultDistance;
+        this.cameraHeight = defaultHeight;
         this.initialCameraPitch = 0; //radians
 
         // Camera controls
@@ -38,12 +40,14 @@ export class CameraSystem {
         const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
 
         // 3. Calculate camera offset in local ENU frame
+        // We want the camera to maintain a fixed orbital distance from the player
+        // regardless of pitch angle
         const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
         const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
 
         const offsetX = horizontalDistance * Math.sin(this.cameraHeading); // East
         const offsetY = horizontalDistance * Math.cos(this.cameraHeading); // North
-        const offsetZ = this.cameraHeight + verticalDistance; // Up
+        const offsetZ = verticalDistance; // Up - this is purely the vertical component of our spherical coordinate
 
         const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
@@ -109,12 +113,15 @@ export class CameraSystem {
             if (cesiumFrustum.far) this.threeCamera.far = cesiumFrustum.far;
             this.threeCamera.updateProjectionMatrix();
 
-            // Position camera behind player in local space
-            const distance = this.cameraDistance;
+            // Position camera using spherical coordinates to maintain fixed orbital distance
+            // Calculate the proper position in local space using the orbital distance
+            const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
+            const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
+
             this.threeCamera.position.set(
-                distance * Math.sin(this.cameraHeading),
-                distance * Math.cos(this.cameraHeading),
-                this.cameraHeight
+                horizontalDistance * Math.sin(this.cameraHeading),
+                horizontalDistance * Math.cos(this.cameraHeading),
+                verticalDistance
             );
             this.threeCamera.lookAt(0, 0, 0);
         }
@@ -217,7 +224,7 @@ export class CameraSystem {
         const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
         const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
         const offsetY = horizontalDistance * Math.cos(this.cameraHeading);
-        const offsetZ = this.cameraHeight + verticalDistance;
+        const offsetZ = verticalDistance;
         const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
         const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(

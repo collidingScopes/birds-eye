@@ -99,10 +99,15 @@ export function getDirection(headingRad) {
  * @param {Object} cesiumViewer - Cesium viewer instance
  * @param {Object} miniMapInstance - Minimap instance
  * @param {Object} cameraSystemInstance - Camera system instance
+ * @param {Object} terrainManager - Terrain manager instance
+ * @param {HTMLElement} instructionsElement - Element to display instructions
  */
-export function setupInputListeners(inputState, playerPosition, verticalVelocityRef, playerHeadingRef,
+export function setupInputListeners(
+    inputState, playerPosition, verticalVelocityRef, playerHeadingRef,
     updateDirectionVectorsFunc, forwardDirection, rightDirection,
-    citiesData, cesiumViewer, miniMapInstance, cameraSystemInstance) {
+    citiesData, cesiumViewer, miniMapInstance, cameraSystemInstance, 
+    terrainManager, instructionsElement
+) {
 
     const citySelector = document.getElementById('citySelector');
 
@@ -143,57 +148,110 @@ export function setupInputListeners(inputState, playerPosition, verticalVelocity
     });
 
     // City selection logic
-    citySelector.addEventListener('change', (event) => {
+    citySelector.addEventListener('change', async (event) => {
         const selectedCity = event.target.value;
         if (citiesData[selectedCity]) {
             console.log(`Changing city to: ${selectedCity}`);
             const cityCoords = citiesData[selectedCity];
 
-            // Reset player state
-            playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
-            playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
-            playerPosition.height = groundHeight + 1.0; // Start slightly above ground
-
-            // Reset physics and orientation state using refs
-            verticalVelocityRef.value = 0;
-            playerHeadingRef.value = Cesium.Math.toRadians(0.0); // Reset heading to North
-
-            // Update direction vectors for new heading
-            updateDirectionVectorsFunc(playerHeadingRef.value, forwardDirection, rightDirection);
-
-            // Reset minimap
-            if (miniMapInstance) {
-                 miniMapInstance.update(playerPosition, playerHeadingRef.value);
-            }
-
-            // Use camera system for teleportation
-            if (cameraSystemInstance) {
-                // Teleport camera to new position with a smooth flight animation
-                // Pass the player heading (which is now North / 0 radians)
-                // Camera will position itself behind the player accordingly
-                cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.5); // 1.5 second flight
-            } else {
-                console.error("Camera System not available for teleport.");
-                // Legacy fallback (Consider removing if CameraSystem is always used)
-                const targetWorldPos = Cesium.Cartesian3.fromRadians(
-                    playerPosition.longitude,
-                    playerPosition.latitude,
-                    playerPosition.height + 500 // Fly to a point above
-                );
-                cesiumViewer.camera.flyTo({
-                    destination: targetWorldPos,
-                    orientation: {
-                        heading: playerHeadingRef.value,
-                        pitch: Cesium.Math.toRadians(-30.0), // Look down slightly more during flight
-                        roll: 0.0
-                    },
-                    duration: 1.5
-                });
-            }
-             // Indicate loading state while city potentially loads new tiles
-            const instructionsElement = document.getElementById('instructions');
+            // Update UI to show loading state
             if (instructionsElement) {
                 instructionsElement.innerHTML = `Loading ${selectedCity}...`;
+                instructionsElement.classList.add('loading');
+            }
+
+            try {
+                // Pre-sample terrain at destination for accurate player placement
+                // This will also cache the result for future use
+                let terrainHeight;
+                
+                if (terrainManager) {
+                    // Use terrain manager if available
+                    terrainHeight = await terrainManager.prepareDestination(
+                        cityCoords.longitude,
+                        cityCoords.latitude
+                    );
+                    console.log(`Terrain height at ${selectedCity}: ${terrainHeight}m`);
+                } else {
+                    // Fallback to default ground height if no terrain manager
+                    console.warn("No terrain manager available, using default ground height");
+                    terrainHeight = groundHeight || 0.5;
+                }
+
+                // Reset player state
+                playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
+                playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
+                playerPosition.height = terrainHeight + 1.0; // Start slightly above ground
+
+                // Reset physics and orientation state using refs
+                verticalVelocityRef.value = 0;
+                playerHeadingRef.value = Cesium.Math.toRadians(0.0); // Reset heading to North
+
+                // Update direction vectors for new heading
+                updateDirectionVectorsFunc(playerHeadingRef.value, forwardDirection, rightDirection);
+
+                // Reset minimap
+                if (miniMapInstance) {
+                    miniMapInstance.update(playerPosition, playerHeadingRef.value);
+                }
+
+                // Use camera system for teleportation
+                if (cameraSystemInstance) {
+                    // Teleport camera to new position with a smooth flight animation
+                    // Pass the player heading (which is now North / 0 radians)
+                    // Camera will position itself behind the player accordingly
+                    await cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.5); // 1.5 second flight
+                } else {
+                    console.error("Camera System not available for teleport.");
+                    // Legacy fallback (Consider removing if CameraSystem is always used)
+                    const targetWorldPos = Cesium.Cartesian3.fromRadians(
+                        playerPosition.longitude,
+                        playerPosition.latitude,
+                        playerPosition.height + 500 // Fly to a point above
+                    );
+                    await cesiumViewer.camera.flyTo({
+                        destination: targetWorldPos,
+                        orientation: {
+                            heading: playerHeadingRef.value,
+                            pitch: Cesium.Math.toRadians(-30.0), // Look down slightly more during flight
+                            roll: 0.0
+                        },
+                        duration: 1.5
+                    });
+                }
+
+                // Update UI to show normal state after loading completes
+                if (instructionsElement) {
+                    instructionsElement.classList.remove('loading');
+                    instructionsElement.innerHTML = `Now in ${selectedCity} | W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump`;
+                }
+                
+            } catch (error) {
+                console.error(`Error teleporting to ${selectedCity}:`, error);
+                
+                // Fallback to standard location if terrain sampling fails
+                playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
+                playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
+                playerPosition.height = (groundHeight || 0.5) + 1.0; // Use default ground height + 1.0
+
+                // Reset physics state
+                verticalVelocityRef.value = 0;
+                
+                // Update UI to show error state
+                if (instructionsElement) {
+                    instructionsElement.classList.remove('loading');
+                    instructionsElement.innerHTML = `Error loading ${selectedCity}. Using default elevation.`;
+                    
+                    // Reset instructions after 3 seconds
+                    setTimeout(() => {
+                        instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump`;
+                    }, 3000);
+                }
+                
+                // Still attempt camera teleportation
+                if (cameraSystemInstance) {
+                    cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.0);
+                }
             }
         }
     });
