@@ -1,3 +1,4 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
 /**
  * CameraSystem class - FIXED
  * Manages camera positioning, orientation, and controls for third-person view
@@ -210,7 +211,6 @@ export class CameraSystem {
      */
     teleport(playerPosition, playerHeading, duration, customPitch = null) {
         this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
-        
         // Only reset pitch if customPitch is not provided
         if (customPitch !== null) {
             this.cameraPitch = customPitch;

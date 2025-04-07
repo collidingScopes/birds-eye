@@ -17,7 +17,12 @@ export const cities = {
     toronto: { longitude: -79.3832, latitude: 43.6532 },
     istanbul: { longitude: 28.9784, latitude: 41.0082 },
     hanoi: { longitude: 105.8342, latitude: 21.0278 },
-    hongkong: { longitude: 114.1694, latitude: 22.3193 }
+    hongkong: { longitude: 114.1694, latitude: 22.3193 },
+    seoul: { longitude: 126.9780, latitude: 37.5665 },
+    shanghai: { longitude: 121.4737, latitude: 31.2304 },
+    sanfrancisco: { longitude: -122.4194, latitude: 37.7749 },
+    berlin: { longitude: 13.4050, latitude: 52.5200 },
+    riodejaneiro: { longitude: -43.1729, latitude: -22.9068 },
 };
 
 /**
