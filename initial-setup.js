@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
-import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/FBXLoader.js';
+import { AnimationSystem } from './animation-system.js';
 
 // Performance Settings
 const tilesMaximumScreenSpaceError = 50;
@@ -8,10 +9,17 @@ const enableLOD = true;
 
 /**
  * Initializes the Three.js scene
- * @returns {Object} Three.js objects
+ * @returns {Object} Three.js objects and animation system
  */
 export async function initThree() {
-    const three = { scene: null, camera: null, renderer: null, playerMesh: null };
+    const three = { 
+        scene: null, 
+        camera: null, 
+        renderer: null, 
+        playerMesh: null,
+        animationSystem: null,
+        clock: new THREE.Clock()
+    };
     
     const scene = new THREE.Scene();
     const canvas = document.getElementById('threeCanvas');
@@ -31,38 +39,79 @@ export async function initThree() {
     three.renderer = renderer;
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.8);
     scene.add(ambientLight);
+    /*
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(0, 10, 5);
     scene.add(directionalLight);
+    */
 
-    // Load GLB Model
-    const loader = new GLTFLoader();
+    // Load FBX Model
+    const loader = new FBXLoader();
     try {
-        const gltf = await loader.loadAsync('assets/panda3DModel8.glb');
-        const playerMesh = gltf.scene;
+        const fbx = await loader.loadAsync('assets/pandaFBX/panda.fbx');
+        const playerMesh = fbx;
+        
+        // Add debugging to check model details
+        console.log("FBX model details:", {
+            children: playerMesh.children.length,
+            animations: playerMesh.animations ? playerMesh.animations.length : 0,
+            geometry: playerMesh.children.some(c => c.geometry !== undefined)
+        });
         
         // Center the model properly
         const box = new THREE.Box3().setFromObject(playerMesh);
         const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        console.log("Model dimensions:", size);
+        
         playerMesh.position.x = -center.x;
         playerMesh.position.y = -center.y;
         playerMesh.position.z = -center.z;
         
-        // Adjust scale as needed (may need to be tweaked)
-        const scale = 1.0; // Adjust this value as needed
+        const scale = 1.2;
         playerMesh.scale.set(scale, scale, scale);
         
-        // Set initial rotation to face North (adjust if needed)
-        playerMesh.rotation.y = 0;
+        // Make sure the model is visible
+        playerMesh.traverse(function(child) {
+            if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                
+                // Check if material exists and is properly configured
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => {
+                            mat.transparent = false;
+                            mat.opacity = 1.0;
+                            mat.side = THREE.DoubleSide;
+                        });
+                    } else {
+                        child.material.transparent = false;
+                        child.material.opacity = 1.0;
+                        child.material.side = THREE.DoubleSide;
+                    }
+                }
+            }
+        });
         
+        // Add the model to the scene
         scene.add(playerMesh);
         three.playerMesh = playerMesh;
-        console.log("GLB player model loaded successfully.");
+        console.log("FBX player model added to scene successfully.");
+        
+        // Initialize animation system
+        const animationSystem = new AnimationSystem(scene, playerMesh);
+        three.animationSystem = animationSystem;
+        
+        // Load all animations
+        await animationSystem.loadAllAnimations(loader);
+        console.log("Animations loaded successfully.");
+        
     } catch (error) {
-        console.error("Failed to load GLB model:", error);
-        // Fallback to cylinder (as in your original code)
+        console.error("Failed to load FBX model:", error);
+        // Fallback to cylinder if FBX fails to load
         const radius = 0.3;
         const height = 5.0;
         const cylinder = new THREE.CylinderGeometry(radius, radius, height, 8);

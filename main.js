@@ -15,6 +15,7 @@ import {
 import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
 import { SkyGradient } from './sky-gradient.js';
+import { AnimationSystem } from './animation-system.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -248,6 +249,12 @@ function update(currentTime) {
     if (three.playerMesh) {
         three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
         three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
+        
+        // Update animations based on player state
+        if (three.animationSystem) {
+            three.animationSystem.updatePlayerAnimation(inputState, onSurface, verticalVelocity);
+            three.animationSystem.update(deltaTime);
+        }
     }
 
     // --- 7. Update Sky Gradient ---
@@ -279,7 +286,15 @@ function update(currentTime) {
     // --- 10. Update Instructions Display ---
     const heightInfo = ` (Altitude: ${playerPosition.height.toFixed(1)}m)`;
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
-    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
+    
+    // Add animation info to display
+    let animationInfo = "";
+    if (three.animationSystem && three.animationSystem.currentAction) {
+        const actionName = three.animationSystem.currentAction.getClip().name;
+        animationInfo = ` | Animation: ${actionName}`;
+    }
+    
+    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}${animationInfo}`;
 }
 
 /**
@@ -428,6 +443,33 @@ function addTimeOfDaySelector() {
     container.appendChild(select);
     document.body.appendChild(container);
 }
+
+/**
+ * Preloads necessary textures for FBX models
+ * This helps ensure textures are available when the model loads
+ */
+function preloadTextures() {
+    // List of textures used by the FBX models (if any)
+    const textureUrls = [
+        // Add texture paths here if your FBX model requires specific textures
+    ];
+    
+    // Preload each texture
+    const textureLoader = new THREE.TextureLoader();
+    textureUrls.forEach(url => {
+        textureLoader.load(url, 
+            // Success callback
+            texture => console.log(`Preloaded texture: ${url}`),
+            // Progress callback
+            undefined,
+            // Error callback
+            error => console.warn(`Failed to preload texture ${url}:`, error)
+        );
+    });
+}
+
+// Call preload before initialization if needed
+// preloadTextures();
 
 // --- Window Resize Handling ---
 window.addEventListener('resize', () => {

@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-    <title>Three.js Character in Cesium City - Upgraded</title>
+    <title>Three.js Character in Cesium City - FBX Animation</title>
     <link rel="stylesheet" href="styles.css">
 
     <!-- Load CesiumJS (Updated Version) -->
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.119/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
 
+    <!-- Add Zlib.js for FBX loader support -->
+    <script src="https://cdn.jsdelivr.net/npm/zlibjs@0.3.1/bin/inflate.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/zlibjs@0.3.1/bin/zlib.min.js"></script>
+    
     <!-- Three.js will be loaded via import in main.js -->
 </head>
 <body>
@@ -33,6 +37,7 @@
         Loading City Data...
     </div>
     <div id="fpsCounter">FPS: --</div>
+    <div id="animationInfo">Animation: --</div>
 </body>
 
 <!-- IMPORTANT: Load supporting scripts first -->
