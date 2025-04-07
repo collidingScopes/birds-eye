@@ -3,6 +3,8 @@ export const cameraTurnSpeed = 1.5;
 export const jumpVelocity = 50;
 export const gravity = -50.0;
 export const groundHeight = 0.5;
+// Define fall height constant to reuse
+export const DRAMATIC_FALL_HEIGHT = 2500;
 
 // City Coordinates
 export const cities = {
@@ -101,12 +103,13 @@ export function getDirection(headingRad) {
  * @param {Object} cameraSystemInstance - Camera system instance
  * @param {Object} terrainManager - Terrain manager instance
  * @param {HTMLElement} instructionsElement - Element to display instructions
+ * @param {Object} fallStateRef - Reference to the dramatic fall state variables
  */
 export function setupInputListeners(
     inputState, playerPosition, verticalVelocityRef, playerHeadingRef,
     updateDirectionVectorsFunc, forwardDirection, rightDirection,
     citiesData, cesiumViewer, miniMapInstance, cameraSystemInstance, 
-    terrainManager, instructionsElement
+    terrainManager, instructionsElement, fallStateRef
 ) {
 
     const citySelector = document.getElementById('citySelector');
@@ -153,13 +156,13 @@ export function setupInputListeners(
         if (citiesData[selectedCity]) {
             console.log(`Changing city to: ${selectedCity}`);
             const cityCoords = citiesData[selectedCity];
-
+    
             // Update UI to show loading state
             if (instructionsElement) {
                 instructionsElement.innerHTML = `Loading ${selectedCity}...`;
                 instructionsElement.classList.add('loading');
             }
-
+    
             try {
                 // Pre-sample terrain at destination for accurate player placement
                 // This will also cache the result for future use
@@ -177,37 +180,68 @@ export function setupInputListeners(
                     console.warn("No terrain manager available, using default ground height");
                     terrainHeight = groundHeight || 0.5;
                 }
-
+    
                 // Reset player state
                 playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
                 playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
-                playerPosition.height = terrainHeight + 1.0; // Start slightly above ground
-
-                // Reset physics and orientation state using refs
-                verticalVelocityRef.value = 0;
+                
+                // IMPORTANT: Set the player position height to terrain height + DRAMATIC_FALL_HEIGHT
+                // This is the key fix - ensure we're starting from high up
+                playerPosition.height = DRAMATIC_FALL_HEIGHT;
+                console.log(`Setting initial player height to: ${playerPosition.height}m`);
+    
+                // Reset fall state - ENABLE the fall state
+                fallStateRef.isInInitialFall = true;
+                fallStateRef.initialFallComplete = false;
+                fallStateRef.fallStartTime = performance.now();
+                
+                // Reset physics state for the dramatic fall
+                verticalVelocityRef.value = -10.0; // Initial downward velocity
                 playerHeadingRef.value = Cesium.Math.toRadians(0.0); // Reset heading to North
-
+    
                 // Update direction vectors for new heading
                 updateDirectionVectorsFunc(playerHeadingRef.value, forwardDirection, rightDirection);
-
+    
                 // Reset minimap
                 if (miniMapInstance) {
                     miniMapInstance.update(playerPosition, playerHeadingRef.value);
                 }
-
-                // Use camera system for teleportation
+    
+                // Update UI to show teleportation state
+                if (instructionsElement) {
+                    instructionsElement.classList.remove('loading');
+                    instructionsElement.innerHTML = `Teleporting to ${selectedCity}...`;
+                }
+    
+                // Use camera system for teleportation with a dramatic view
                 if (cameraSystemInstance) {
-                    // Teleport camera to new position with a smooth flight animation
-                    // Pass the player heading (which is now North / 0 radians)
-                    // Camera will position itself behind the player accordingly
-                    await cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.5); // 1.5 second flight
+                    // Set up a panoramic view for teleportation
+                    const teleportCameraPitch = Cesium.Math.toRadians(-15); // Look down from above
+                    
+                    // Use a shorter teleport duration so we can see the fall sooner
+                    const teleportDuration = 0.0;
+                    
+                    // This is critical: Pass the ACTUAL player position with the correct height
+                    await cameraSystemInstance.teleport(
+                        playerPosition, 
+                        playerHeadingRef.value, 
+                        teleportDuration, 
+                        teleportCameraPitch
+                    );
+                    
+                    console.log("Teleportation complete, drama fall active");
+                    
+                    // Update UI to show dramatic fall state
+                    if (instructionsElement) {
+                        instructionsElement.innerHTML = `Entering ${selectedCity}... Brace for impact!`;
+                    }
                 } else {
                     console.error("Camera System not available for teleport.");
                     // Legacy fallback (Consider removing if CameraSystem is always used)
                     const targetWorldPos = Cesium.Cartesian3.fromRadians(
                         playerPosition.longitude,
                         playerPosition.latitude,
-                        playerPosition.height + 500 // Fly to a point above
+                        playerPosition.height
                     );
                     await cesiumViewer.camera.flyTo({
                         destination: targetWorldPos,
@@ -219,12 +253,6 @@ export function setupInputListeners(
                         duration: 1.5
                     });
                 }
-
-                // Update UI to show normal state after loading completes
-                if (instructionsElement) {
-                    instructionsElement.classList.remove('loading');
-                    instructionsElement.innerHTML = `Now in ${selectedCity} | W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump`;
-                }
                 
             } catch (error) {
                 console.error(`Error teleporting to ${selectedCity}:`, error);
@@ -233,7 +261,7 @@ export function setupInputListeners(
                 playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
                 playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
                 playerPosition.height = (groundHeight || 0.5) + 1.0; // Use default ground height + 1.0
-
+    
                 // Reset physics state
                 verticalVelocityRef.value = 0;
                 

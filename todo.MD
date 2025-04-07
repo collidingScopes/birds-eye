@@ -43,3 +43,8 @@ Refactor and improve code for fps
 Only re-check buildling collision if moving more than x meters
 
 Sound effects and music
+
+Make the dramatic initial fall happen whenever you teleport to a new city
+-- add an overlay that highlights hte city name for a few seconds
+
+Add city chooser at the start menu?

@@ -10,7 +10,8 @@ import {
     jumpVelocity,
     gravity,
     groundHeight,
-    cities
+    cities,
+    DRAMATIC_FALL_HEIGHT // Import the fall height constant
 } from './helper-functions.js';
 import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
@@ -22,8 +23,11 @@ Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOi
 
 // --- State Variables ---
 // DRAMATIC FALL: Set initial height much higher
-const INITIAL_DROP_HEIGHT = 2500; 
-let playerPosition = Cesium.Cartographic.fromDegrees(cities.nyc.longitude, cities.nyc.latitude, groundHeight + INITIAL_DROP_HEIGHT);
+let playerPosition = Cesium.Cartographic.fromDegrees(
+    cities.nyc.longitude, 
+    cities.nyc.latitude, 
+    groundHeight + DRAMATIC_FALL_HEIGHT
+);
 let terrainManager;
 
 // Coordinate System Convention:
@@ -50,10 +54,13 @@ const inputState = {
     strafeRight: false  // D
 };
 
-// --- DRAMATIC FALL flags ---
-let isInInitialFall = true;
-let initialFallComplete = false;
-let fallStartTime = 0;
+// --- DRAMATIC FALL state reference ---
+// Create an object reference so we can pass it to functions and update it
+const fallStateRef = {
+    isInInitialFall: true,           // Start in fall mode
+    initialFallComplete: false,
+    fallStartTime: performance.now() // Initialize with current time
+};
 
 // --- Building Detection Cache ---
 const buildingCache = {
@@ -127,6 +134,9 @@ async function initialize() {
     const verticalVelocityRef = { value: verticalVelocity };
     const playerHeadingRef = { value: playerHeading };
     
+    // Initialize fall start time
+    fallStateRef.fallStartTime = performance.now();
+    
     setupInputListeners(
         inputState, 
         playerPosition, 
@@ -139,8 +149,9 @@ async function initialize() {
         viewer, 
         miniMap, 
         cameraSystem,
-        terrainManager,  // Pass the terrain manager as a new parameter
-        instructionsElement  // Pass the instructions element
+        terrainManager,
+        instructionsElement,
+        fallStateRef  // Pass the fall state reference
     );
     
     verticalVelocity = verticalVelocityRef.value;
@@ -150,16 +161,18 @@ async function initialize() {
         osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
         console.log("Initial setup complete. Starting update loop.");
         
+        // Verify player height is set properly
+        console.log(`Initial player height: ${playerPosition.height}m`);
+        console.log(`Initial fall state: ${fallStateRef.isInInitialFall}`);
+        
         // DRAMATIC FALL: Use a special camera setup for the fall
         // Set camera to look slightly downward at the start of the fall
-        cameraSystem.teleport(playerPosition, playerHeading, 0);
+        const initialCameraPitch = Cesium.Math.toRadians(-15); // Look down from above
+        cameraSystem.teleport(playerPosition, playerHeading, 0, initialCameraPitch);
         cameraSystem.syncThreeCamera();
         
         // DRAMATIC FALL: Display special instructions for the dramatic fall
         instructionsElement.innerHTML = "Entering the city... Brace for impact!";
-        
-        // DRAMATIC FALL: Set the start time for the fall
-        fallStartTime = performance.now();
         
         lastTime = performance.now();
         requestAnimationFrame(update);
@@ -196,8 +209,8 @@ function update(currentTime) {
     const isJumping = inputState.jump;
     const physicsActive = verticalVelocity !== 0 || (playerPosition && playerPosition.height > groundHeight + 0.1);
     
-    // DRAMATIC FALL: Always render during initial fall
-    if (isInInitialFall) {
+    // DRAMATIC FALL: Always render during fall
+    if (fallStateRef.isInInitialFall) {
         needsRender = true;
     }
 
@@ -214,8 +227,8 @@ function update(currentTime) {
     needsRender = false;
 
     // --- 1. Update Camera Controls (Arrow Keys) and synchronize player orientation ---
-    // DRAMATIC FALL: Disable camera controls during initial fall
-    if (!isInInitialFall) {
+    // DRAMATIC FALL: Disable camera controls during fall
+    if (!fallStateRef.isInInitialFall) {
         const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
         if (cameraControlResult.changed) {
             needsRender = true;
@@ -226,8 +239,8 @@ function update(currentTime) {
         }
     } else {
         // DRAMATIC FALL: During fall, gradually adjust camera pitch to look more at the ground
-        const fallProgress = Math.min((currentTime - fallStartTime) / 10000, 1.0); // 10 seconds to reach max look-down
-        cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45); // Gradually pitch from 10 to 50 degrees
+        const fallProgress = Math.min((currentTime - fallStateRef.fallStartTime) / 10000, 1.0); // 10 seconds to reach max look-down
+        cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45); // Gradually pitch 50 to 5 degrees
         needsRender = true;
     }
 
@@ -240,22 +253,22 @@ function update(currentTime) {
     // Check if player is on a surface (ground or building)
     const onSurface = terrainManager.isOnSurface(playerPosition, verticalVelocity, buildingCollision);
 
-    // DRAMATIC FALL: Handle the landing from the initial fall
-    if (isInInitialFall && (
+    // DRAMATIC FALL: Handle the landing from the fall
+    if (fallStateRef.isInInitialFall && (
         onSurface || 
         playerPosition.height <= surfaceHeight || 
         Math.abs(playerPosition.height - surfaceHeight) < 0.1 ||
         playerPosition.height <= 0
     )) {
-        console.log("Initial fall complete! Landing detected.");
-        isInInitialFall = false;
-        initialFallComplete = true;
+        console.log("Fall complete! Landing detected.");
+        fallStateRef.isInInitialFall = false;
+        fallStateRef.initialFallComplete = true;
         // Ensure player is exactly at surface height
         playerPosition.height = surfaceHeight;
     }
 
-    // DRAMATIC FALL: During initial fall, increase vertical velocity for more dramatic effect
-    if (isInInitialFall) {
+    // DRAMATIC FALL: During fall, increase vertical velocity for more dramatic effect
+    if (fallStateRef.isInInitialFall) {
         verticalVelocity += gravity * deltaTime * 1.5; // 1.5x normal gravity for more dramatic fall
     } else {
         // Normal jump handling
@@ -274,10 +287,10 @@ function update(currentTime) {
     if (playerPosition.height < surfaceHeight) {
         playerPosition.height = surfaceHeight;
         
-        // DRAMATIC FALL: Add a small bounce effect when landing from the initial fall
-        if (isInInitialFall || (initialFallComplete && Math.abs(verticalVelocity) > 20)) {
+        // DRAMATIC FALL: Add a small bounce effect when landing from the fall
+        if (fallStateRef.isInInitialFall || (fallStateRef.initialFallComplete && Math.abs(verticalVelocity) > 20)) {
             verticalVelocity = Math.abs(verticalVelocity) * -0.2; // 20% bounce
-            initialFallComplete = false; // Reset once we've applied the bounce
+            fallStateRef.initialFallComplete = false; // Reset once we've applied the bounce
         } else {
             verticalVelocity = 0;
         }
@@ -286,13 +299,13 @@ function update(currentTime) {
     needsRender = true;
 
     // --- 3. Update Player Horizontal Position (W/S/A/D for Movement) ---
-    // DRAMATIC FALL: Disable movement controls during initial fall
+    // DRAMATIC FALL: Disable movement controls during fall
     const moveAmount = playerMoveSpeed * deltaTime;
     let deltaEast = 0;
     let deltaNorth = 0;
     let movedHorizontally = false;
 
-    if (!isInInitialFall) {
+    if (!fallStateRef.isInInitialFall) {
         // Use player heading for movement direction (aligned with camera)
         const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
         const movementRight = { x: rightDirection.x, y: rightDirection.y };
@@ -440,7 +453,13 @@ function update(currentTime) {
     // --- 10. Update Instructions Display ---
     const heightInfo = ` (Altitude: ${playerPosition.height.toFixed(1)}m)`;
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
-    instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
+    
+    // Custom instructions during dramatic fall
+    if (fallStateRef.isInInitialFall) {
+        instructionsElement.innerHTML = `Entering city... Brace for impact!${heightInfo}`;
+    } else {
+        instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
+    }
 }
 
 // --- Window Resize Handling ---

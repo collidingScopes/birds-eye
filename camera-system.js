@@ -208,14 +208,27 @@ export class CameraSystem {
      * @param {number} playerHeading - New player heading in radians
      * @param {number} duration - Flight duration in seconds (0 for instant)
      */
-    teleport(playerPosition, playerHeading, duration = 0) {
+    teleport(playerPosition, playerHeading, duration, customPitch = null) {
         this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
-        this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch);
+        
+        // Only reset pitch if customPitch is not provided
+        if (customPitch !== null) {
+            this.cameraPitch = customPitch;
+        } else {
+            this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch);
+        }
+
+        // Create a copy of the player position to ensure it isn't modified during teleportation
+        const teleportPosition = {
+            longitude: playerPosition.longitude,
+            latitude: playerPosition.latitude,
+            height: playerPosition.height
+        };
 
         const targetPlayerWorldPos = Cesium.Cartesian3.fromRadians(
-            playerPosition.longitude,
-            playerPosition.latitude,
-            playerPosition.height
+            teleportPosition.longitude,
+            teleportPosition.latitude,
+            teleportPosition.height
         );
 
         const targetEnuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(targetPlayerWorldPos);
@@ -260,10 +273,12 @@ export class CameraSystem {
                     direction: finalDirection,
                     up: finalUp
                 },
-                duration: duration
+                duration: duration,
+                complete: () => {
+                    // Sync camera after flight completes
+                    this.syncThreeCamera();
+                }
             });
-            // Add explicit sync after flight completes
-            setTimeout(() => this.syncThreeCamera(), duration * 1000);
         } else {
             this.cesiumCamera.position = finalCameraPos;
             this.cesiumCamera.direction = finalDirection;
