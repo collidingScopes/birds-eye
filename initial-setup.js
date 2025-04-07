@@ -247,7 +247,7 @@ export function initCesium() {
 }
 
 /**
- * Loads the OSM Buildings tileset
+ * Loads the OSM Buildings tileset with pastel glass appearance
  * @param {Object} viewer - Cesium viewer instance
  * @param {HTMLElement} instructionsElement - Element to display instructions
  * @returns {Promise<Object>} Promise resolving to the tileset
@@ -256,17 +256,54 @@ export async function loadOsmBuildings(viewer, instructionsElement) {
     try {
         const osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188, {
             maximumScreenSpaceError: tilesMaximumScreenSpaceError,
-            // Removed maximumMemoryUsage as it's not valid in Cesium 1.119
             cullWithChildrenBounds: true,
             skipLevelOfDetail: false,
             preferLeaves: true
         });
 
         viewer.scene.primitives.add(osmBuildingsTileset);
-        osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({ color: "color('#e0e0e0')" });
+        
+        // Create a colorful pastel glass style with transparency
+        // Use a deterministic function based on feature properties to assign consistent colors
+        osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({
+            color: {
+                evaluateColor: function(feature, result) {
+                    // Get a property to base color on (height, feature ID, etc.)
+                    const height = feature.getProperty('height') || feature.getProperty('render_height') || 20;
+                    const id = feature.getProperty('id') || feature.getProperty('building');
+                    
+                    // Use a hash-like function to get consistent colors for same buildings
+                    let hashValue = 0;
+                    if (id) {
+                        // Simple string hash for consistency
+                        for (let i = 0; i < id.length; i++) {
+                            hashValue = ((hashValue << 5) - hashValue) + id.charCodeAt(i);
+                            hashValue |= 0; // Convert to 32bit integer
+                        }
+                    } else {
+                        // If no ID, use height as fallback
+                        hashValue = Math.floor(height * 1000);
+                    }
+                    
+                    // Create a pastel color palette
+                    // Pastel colors have high lightness and low to medium saturation
+                    const hue = Math.abs(hashValue+100 % 360); // 0-359 degree hue
+                    
+                    // Create pastels by keeping saturation and value high
+                    // Alpha is set to create transparency effect (0.65 = 35% transparent)
+                    return Cesium.Color.fromHsl(
+                        hue / 360.0,     // Hue (normalized 0-1)
+                        1.0,             // Saturation (lower for more pastel look)
+                        0.8,            // Lightness (higher for more pastel look)
+                        1.0,            // Alpha (65% opaque)
+                        result
+                    );
+                }
+            }
+        });
 
         await osmBuildingsTileset.readyPromise;
-        console.log("OSM Buildings Tileset Ready.");
+        console.log("OSM Buildings Tileset Ready with Pastel Glass Style.");
 
         if (enableLOD) {
             setupLOD(osmBuildingsTileset);
