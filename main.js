@@ -112,11 +112,14 @@ function update(currentTime) {
     lastRenderTime = currentTime;
     needsRender = false;
 
-    // --- 1. Update Camera Controls (Arrow Keys) INDEPENDENT of player orientation ---
-    // Let the camera system handle camera controls instead of direct manipulation
-    if (cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed)) {
+    // --- 1. Update Camera Controls (Arrow Keys) and synchronize player orientation ---
+    const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
+    if (cameraControlResult.changed) {
         needsRender = true;
-        // Note: We're NOT updating player heading here anymore
+        
+        // Synchronize player heading to always face away from camera
+        playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
+        updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
     }
 
     // --- 2. Handle Jumping and Gravity ---
@@ -147,20 +150,14 @@ function update(currentTime) {
     needsRender = true;
 
     // --- 3. Update Player Horizontal Position (W/S/A/D for Movement) ---
-    // Use the camera heading (not player heading) to determine movement direction
-    // This makes movement relative to the camera view
     const moveAmount = playerMoveSpeed * deltaTime;
     let deltaEast = 0;
     let deltaNorth = 0;
     let movedHorizontally = false;
 
-    // Get the camera heading for movement direction
-    const cameraHeading = cameraSystem.getHeading();
-    
-    // Recalculate movement direction vectors based on camera heading
-    const movementForward = { x: 0, y: 0 };
-    const movementRight = { x: 0, y: 0 };
-    updateDirectionVectors(cameraHeading, movementForward, movementRight);
+    // Use player heading for movement direction (aligned with camera)
+    const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
+    const movementRight = { x: rightDirection.x, y: rightDirection.y };
 
     if (inputState.forward) {
         deltaEast += movementForward.x;
@@ -230,19 +227,6 @@ function update(currentTime) {
                     verticalVelocity = -0.1;
                 }
             }
-            
-            // Update player facing direction to match movement direction when moving
-            if (movedHorizontally) {
-                // Only update player visual rotation for rendering, 
-                // but keep the forwardDirection and rightDirection for calculations
-                if (Math.abs(deltaEast) > 1e-6 || Math.abs(deltaNorth) > 1e-6) {
-                    // Calculate facing angle based on movement direction
-                    playerHeading = Math.atan2(deltaEast, deltaNorth);
-                    if (playerHeading < 0) {
-                        playerHeading += 2 * Math.PI;
-                    }
-                }
-            }
         }
     }
 
@@ -255,18 +239,18 @@ function update(currentTime) {
 
     // --- 5. Update Camera using CameraSystem ---
     cameraSystem.update(
-        playerPosition,  // Player's cartographic position
-        playerHeading,   // Player's heading (for reference only)
-        forwardDirection // Player's forward direction
+        playerPosition,
+        playerHeading,
+        forwardDirection
     );
 
     // --- 6. Update Three.js Player Mesh Orientation and Position ---
     if (three.playerMesh) {
-        three.playerMesh.rotation.y = -playerHeading;
-        three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera will handle world placement
+        three.playerMesh.rotation.set(0, -playerHeading, 0); // Keep upright, rotate around Y-axis only
+        three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
     }
 
-   // --- 7. Update Sky Gradient ---
+    // --- 7. Update Sky Gradient ---
     if (skyGradient) {
         skyGradient.update();
     }
@@ -275,27 +259,21 @@ function update(currentTime) {
     miniMap.update(playerPosition, playerHeading);
 
     // --- 9. Render Both Scenes ---
-    // Important: Clear both renderers first
     if (three.renderer) {
         three.renderer.clear();
     }
     if (viewer) {
-        viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0); // Ensure transparent background
+        viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
     }
 
-    // First, render the Three.js scene (sky only)
     if (three.renderer && three.scene && three.camera) {
-        // Make sure the skyMesh is rendering with proper depth settings
         if (skyGradient && skyGradient.skyMesh) {
-            skyGradient.skyMesh.renderOrder = -1000;  // Ensure it renders first
-            skyGradient.skyMesh.material.depthWrite = false; // Don't write to depth buffer
+            skyGradient.skyMesh.renderOrder = -1000;
+            skyGradient.skyMesh.material.depthWrite = false;
         }
-        
-        // Render the Three.js scene with the sky
         three.renderer.render(three.scene, three.camera);
     }
 
-    // Then render the Cesium scene on top with transparency
     viewer.render();
 
     // --- 10. Update Instructions Display ---
@@ -334,11 +312,6 @@ function changeTimeOfDay(timeOfDayValue) {
             skyGradient.setColors(0x0077ff, 0xb0d8ff);
     }
     
-    // Force an immediate render to show the change
-    if (three.renderer && three.scene && three.camera) {
-        three.renderer.render(three.scene, three.camera);
-    }
-    
     needsRender = true;
 }
 
@@ -346,93 +319,45 @@ function changeTimeOfDay(timeOfDayValue) {
 async function initialize() {
     console.log("Starting initialization sequence...");
     
-    // Initialize Three.js scene with GLB model
     three = await initThree();
     console.log("Three.js initialized");
     
-    // Initialize Cesium
     const result = initCesium();
     viewer = result.viewer;
     cesiumCamera = result.cesiumCamera;
     FrustumCuller = result.FrustumCuller;
     console.log("Cesium initialized");
     
-    // Important: Modify Cesium viewer settings to allow for a transparent background
     viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
     viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);
     
-    // Remove any sky-related elements from Cesium
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
     if (viewer.scene.sun) viewer.scene.sun.show = false;
     if (viewer.scene.moon) viewer.scene.moon.show = false;
     
-    // Setup Three.js renderer for proper transparency
-    three.renderer.setClearColor(0x000000, 0); // Set clear color with alpha = 0
+    three.renderer.setClearColor(0x000000, 0);
     
-    // Initialize our custom sky gradient
-    // IMPORTANT: Create the sky gradient before any other elements
     console.log("Initializing SkyGradient...");
     skyGradient = new SkyGradient(three.scene, three.camera);
-
-    // Set initial sky to daytime
     changeTimeOfDay('day');
     console.log("Sky gradient initialized");
-
-    // And replace it with this updated code:
-        
-    // Initialize our custom sky gradient
-    console.log("Initializing SkyGradient...");
-    // Make sure Three.js renderer is properly configured for transparency
-    three.renderer.setClearColor(0x000000, 0); // Set clear color with alpha = 0
-    three.renderer.autoClear = false; // We'll control clearing manually
-
-    // Create the sky gradient AFTER renderer is properly configured
-    skyGradient = new SkyGradient(three.scene, three.camera);
-
-    // Force sky gradient to update its position
-    skyGradient.update();
-
-    // Force a render of the Three.js scene to ensure sky is visible
-    three.renderer.render(three.scene, three.camera);
-
-    // Set initial sky to daytime
-    changeTimeOfDay('day');
-    console.log("Sky gradient initialized");
-
-    // Force another render after setting time of day
-    three.renderer.render(three.scene, three.camera);
     
-    // Initialize camera system (increased default height to 4.0 for better view)
     cameraSystem = new CameraSystem(cesiumCamera, three.camera, 10.0, 0.1);
     console.log("Camera system initialized");
     
-    // Ensure renderer order is correct
-    // Cesium renders first, then Three.js on top
-    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    viewer.scene.globe.depthTestAgainstTerrain = true;
-    
-    // Force a single render to ensure sky is visible
-    if (three.renderer && three.scene && three.camera) {
-        three.renderer.render(three.scene, three.camera);
-    }
-    viewer.render();
-    
-    // Initialize minimap
     miniMap = new MiniMap(1000);
     
-    // Calculate initial direction vectors
     updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
     
-    // Set up input listeners with references to ensure variables can be modified from listeners
     const verticalVelocityRef = { value: verticalVelocity };
     const playerHeadingRef = { value: playerHeading };
     
     setupInputListeners(
         inputState, 
         playerPosition, 
-        verticalVelocityRef,  // Pass as reference object
-        playerHeadingRef,     // Pass as reference object
+        verticalVelocityRef,
+        playerHeadingRef,
         updateDirectionVectors, 
         forwardDirection, 
         rightDirection, 
@@ -442,26 +367,18 @@ async function initialize() {
         cameraSystem
     );
     
-    // Add time of day selector to the UI
-    addTimeOfDaySelector();
-    
-    // Retrieve values that might have been updated in setupInputListeners
     verticalVelocity = verticalVelocityRef.value;
     playerHeading = playerHeadingRef.value;
     
+    addTimeOfDaySelector();
+    
     try {
-        // Load OSM buildings tileset
         osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
-        
         console.log("Initial setup complete. Starting update loop.");
         
-        // Set initial camera view using the camera system
-        cameraSystem.teleport(playerPosition, cameraSystem.getHeading(), 0);
-        
-        // Force a render of the sky gradient
+        cameraSystem.teleport(playerPosition, playerHeading, 0);
         skyGradient.update();
         
-        // Start the render loop
         lastTime = performance.now();
         requestAnimationFrame(update);
     } catch (error) {
@@ -475,27 +392,20 @@ async function initialize() {
  * Adds a time of day selector dropdown to the UI
  */
 function addTimeOfDaySelector() {
-    // Create container
     const container = document.createElement('div');
     container.id = 'timeOfDayContainer';
-    
-    // Style the container
     container.style.position = 'absolute';
-    container.style.top = '70px'; // Position below city selector
+    container.style.top = '70px';
     container.style.right = '10px';
     container.style.zIndex = '1000';
     
-    // Create dropdown
     const select = document.createElement('select');
     select.id = 'timeOfDaySelector';
-    
-    // Style the select
     select.style.padding = '5px';
     select.style.borderRadius = '4px';
     select.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
     select.style.border = '1px solid #ccc';
     
-    // Add options
     const options = [
         { value: 'day', label: 'Daytime' },
         { value: 'sunset', label: 'Sunset' },
@@ -507,18 +417,14 @@ function addTimeOfDaySelector() {
         const option = document.createElement('option');
         option.value = opt.value;
         option.textContent = opt.label;
-        if (opt.value === timeOfDay) {
-            option.selected = true;
-        }
+        if (opt.value === timeOfDay) option.selected = true;
         select.appendChild(option);
     });
     
-    // Add event listener
     select.addEventListener('change', (event) => {
         changeTimeOfDay(event.target.value);
     });
     
-    // Append to DOM
     container.appendChild(select);
     document.body.appendChild(container);
 }
@@ -543,5 +449,4 @@ window.addEventListener('resize', () => {
     needsRender = true;
 });
 
-// Start initialization
 initialize();

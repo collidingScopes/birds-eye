@@ -170,8 +170,9 @@ export function setupInputListeners(inputState, playerPosition, verticalVelocity
             // Use camera system for teleportation
             if (cameraSystemInstance) {
                 // Teleport camera to new position with a smooth flight animation
-                // Pass the new player heading so camera starts facing the same way
-                cameraSystemInstance.teleport(playerPosition, cameraSystemInstance.getHeading(), 1.5); // 1.5 second flight
+                // Pass the player heading (which is now North / 0 radians)
+                // Camera will position itself behind the player accordingly
+                cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.5); // 1.5 second flight
             } else {
                 console.error("Camera System not available for teleport.");
                 // Legacy fallback (Consider removing if CameraSystem is always used)

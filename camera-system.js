@@ -1,7 +1,6 @@
 /**
  * CameraSystem class - FIXED
  * Manages camera positioning, orientation, and controls for third-person view
- * With fixes for player-camera separation and proper rotation
  */
 export class CameraSystem {
     /**
@@ -19,91 +18,68 @@ export class CameraSystem {
 
         // Camera controls
         this.cameraHeading = 0.0; // Radians, clockwise from North
-        this.cameraPitch = Cesium.Math.toRadians(0.0); // Initial look-down angle
-
-        // Frame of reference transforms
-        this.playerWorldPos = new Cesium.Cartesian3();
-        this.enuTransform = new Cesium.Matrix4();
-        this.cameraWorldPos = new Cesium.Cartesian3();
-        
-        // ThreeJS specific properties
-        this.threeOffset = { x: 0, y: -this.cameraDistance, z: this.cameraHeight };
+        this.cameraPitch = Cesium.Math.toRadians(0); // Initial slight look-down angle
     }
 
     /**
      * Updates the camera position and orientation based on player position
      * @param {Object} playerPosition - Cartographic position (longitude, latitude, height)
-     * @param {number} playerHeading - Player heading in radians (used for context, camera uses its own heading)
-     * @param {Object} forwardDirection - Normalized forward direction vector (not directly used here, but passed)
+     * @param {number} playerHeading - Player heading in radians
+     * @param {Object} forwardDirection - Normalized forward direction vector
      */
     update(playerPosition, playerHeading, forwardDirection) {
         // 1. Calculate player position in world coordinates
-        this.playerWorldPos = Cesium.Cartesian3.fromRadians(
+        const playerWorldPos = Cesium.Cartesian3.fromRadians(
             playerPosition.longitude,
             playerPosition.latitude,
             playerPosition.height
         );
 
         // 2. Get the local ENU frame at player position
-        // This transform gives us the orientation (East, North, Up axes) and origin at the player
-        this.enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(this.playerWorldPos);
+        const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
 
-        // 3. Calculate camera offset in local ENU frame based on camera heading/pitch
-        // Note: Camera heading is independent of player heading
-        const headingOffset = Math.PI; // 180 degrees to position behind the player relative to camera heading
-
-        // Calculate camera position using spherical coordinates relative to player
+        // 3. Calculate camera offset in local ENU frame
         const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
-        const verticalDistance = this.cameraDistance * Math.sin(-this.cameraPitch); // Pitch up moves camera down relative to horizon
+        const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
 
-        // Offset relative to the player's local ENU frame, using camera's heading
-        const offsetX = horizontalDistance * Math.sin(this.cameraHeading + headingOffset); // East component
-        const offsetY = horizontalDistance * Math.cos(this.cameraHeading + headingOffset); // North component
-        const offsetZ = this.cameraHeight + verticalDistance; // Up component (base height + pitch adjustment)
+        const offsetX = horizontalDistance * Math.sin(this.cameraHeading); // East
+        const offsetY = horizontalDistance * Math.cos(this.cameraHeading); // North
+        const offsetZ = this.cameraHeight + verticalDistance; // Up
 
         const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
-        // 4. Transform the local offset vector to world coordinates (ECEF vector)
-        // We use multiplyByPointAsVector because it's an offset, not a position
+        // 4. Transform offset to world coordinates
         const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
-            this.enuTransform,
+            enuTransform,
             cameraOffsetENU,
             new Cesium.Cartesian3()
         );
 
-        // 5. Add the ECEF offset to the player's world position to get the camera's world position
-        this.cameraWorldPos = Cesium.Cartesian3.add(
-            this.playerWorldPos,
+        // 5. Set camera position
+        const cameraWorldPos = Cesium.Cartesian3.add(
+            playerWorldPos,
             cameraOffsetECEF,
             new Cesium.Cartesian3()
         );
+        this.cesiumCamera.position = cameraWorldPos;
 
-        // 6. Position the Cesium camera
-        this.cesiumCamera.position = this.cameraWorldPos;
-
-        // 7. Orient the Cesium camera to look at the player
-        // Calculate the direction vector from camera to player
+        // 6. Orient camera to look at player
         const directionToPlayer = Cesium.Cartesian3.subtract(
-            this.playerWorldPos,
-            this.cameraWorldPos,
+            playerWorldPos,
+            cameraWorldPos,
             new Cesium.Cartesian3()
         );
         Cesium.Cartesian3.normalize(directionToPlayer, directionToPlayer);
 
-        // Calculate the 'up' vector for the camera in world space.
-        // This should generally align with the local 'up' at the player's position.
         const upVector = Cesium.Matrix4.multiplyByPointAsVector(
-            this.enuTransform,
-            new Cesium.Cartesian3(0, 0, 1), // Local UP vector in ENU
+            enuTransform,
+            new Cesium.Cartesian3(0, 0, 1),
             new Cesium.Cartesian3()
         );
         Cesium.Cartesian3.normalize(upVector, upVector);
 
-        // Set camera orientation directly using direction and up
         this.cesiumCamera.direction = directionToPlayer;
         this.cesiumCamera.up = upVector;
-
-        // Cesium automatically calculates the 'right' vector based on direction and up
         this.cesiumCamera.right = Cesium.Cartesian3.cross(
             directionToPlayer,
             upVector,
@@ -111,73 +87,37 @@ export class CameraSystem {
         );
         Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
 
-        // 8. Synchronize Three.js camera with Cesium camera
+        // 7. Synchronize Three.js camera
         this.syncThreeCamera();
     }
 
     /**
      * Synchronizes the Three.js camera with the Cesium camera
-     * Uses a fixed approach that properly maintains the player model visibility and orientation
      */
     syncThreeCamera() {
         if (this.threeCamera) {
-            // Get Cesium's view and projection matrices
             const cvm = this.cesiumCamera.viewMatrix;
             const cpm = this.cesiumCamera.frustum.projectionMatrix;
-            
-            // Apply projection matrix to Three.js camera
+
             this.threeCamera.projectionMatrix.fromArray(cpm);
-            
-            // First, ensure the camera has the right frustum settings
-            if (this.threeCamera.isPerspectiveCamera) {
-                const cesiumFrustum = this.cesiumCamera.frustum;
-                if (cesiumFrustum.fov) {
-                    this.threeCamera.fov = Cesium.Math.toDegrees(cesiumFrustum.fov);
-                }
-                if (cesiumFrustum.near) {
-                    this.threeCamera.near = cesiumFrustum.near;
-                }
-                if (cesiumFrustum.far) {
-                    this.threeCamera.far = cesiumFrustum.far;
-                }
-                this.threeCamera.updateProjectionMatrix();
+            this.threeCamera.projectionMatrixInverse.copy(this.threeCamera.projectionMatrix).invert();
+
+            const cesiumFrustum = this.cesiumCamera.frustum;
+            if (cesiumFrustum.fov) {
+                this.threeCamera.fov = Cesium.Math.toDegrees(cesiumFrustum.fov);
             }
-            
-            // Fix: Position the Three.js camera without affecting player model orientation
+            if (cesiumFrustum.near) this.threeCamera.near = cesiumFrustum.near;
+            if (cesiumFrustum.far) this.threeCamera.far = cesiumFrustum.far;
+            this.threeCamera.updateProjectionMatrix();
+
+            // Position camera behind player in local space
             const distance = this.cameraDistance;
-            
-            // Position camera behind the player model (at origin)
-            // We'll keep the player model upright regardless of camera rotation
             this.threeCamera.position.set(
-                0, 
-                -distance, 
+                distance * Math.sin(this.cameraHeading),
+                distance * Math.cos(this.cameraHeading),
                 this.cameraHeight
             );
-            
-            // Look at the player model (at origin)
             this.threeCamera.lookAt(0, 0, 0);
-            
-            // Apply pitch
-            this.threeCamera.position.y = -Math.cos(this.cameraPitch) * distance;
-            this.threeCamera.position.z = this.cameraHeight + Math.sin(this.cameraPitch) * distance;
-            
-            // Apply heading by rotating the camera around the player
-            // This is done by rotating the camera position around the Y axis
-            const x = this.threeCamera.position.x;
-            const y = this.threeCamera.position.y;
-            
-            const cos = Math.cos(-this.cameraHeading);
-            const sin = Math.sin(-this.cameraHeading);
-            
-            this.threeCamera.position.x = x * cos - y * sin;
-            this.threeCamera.position.y = x * sin + y * cos;
-            
-            // Make sure the camera is still looking at the player
-            this.threeCamera.lookAt(0, 0, 0);
-            
-            // Update the camera matrices
-            this.threeCamera.updateMatrix();
-            this.threeCamera.updateMatrixWorld();
         }
     }
 
@@ -186,47 +126,42 @@ export class CameraSystem {
      * @param {Object} inputState - The current input state
      * @param {number} deltaTime - Time since last frame in seconds
      * @param {number} turnSpeed - Camera turn speed in radians per second
-     * @returns {boolean} True if camera orientation changed
+     * @returns {Object} Object containing changed flag
      */
     updateControls(inputState, deltaTime, turnSpeed) {
         let changed = false;
 
-        // Update heading based on left/right input (Arrow Keys)
         if (inputState.left) {
-            this.cameraHeading -= turnSpeed * deltaTime; // CCW rotation decreases heading
+            this.cameraHeading -= turnSpeed * deltaTime;
             changed = true;
         }
         if (inputState.right) {
-            this.cameraHeading += turnSpeed * deltaTime; // CW rotation increases heading
+            this.cameraHeading += turnSpeed * deltaTime;
             changed = true;
         }
 
-        // Normalize heading to [0, 2π)
         if (changed) {
-            const twoPi = 2.0 * Math.PI;
-            this.cameraHeading = ((this.cameraHeading % twoPi) + twoPi) % twoPi;
+            this.cameraHeading = ((this.cameraHeading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
         }
 
-        // Update pitch based on up/down input (Arrow Keys)
         if (inputState.up) {
-            this.cameraPitch += turnSpeed * deltaTime;
+            this.cameraPitch -= turnSpeed * deltaTime * 0.5;
             changed = true;
         }
         if (inputState.down) {
-            this.cameraPitch -= turnSpeed * deltaTime;
+            this.cameraPitch += turnSpeed * deltaTime *0.5;
             changed = true;
         }
 
-        // Clamp pitch to reasonable range for RPG-style camera
         if (changed) {
             this.cameraPitch = Cesium.Math.clamp(
                 this.cameraPitch,
-                Cesium.Math.toRadians(-45.0), // Allow looking down more
-                Cesium.Math.toRadians(45.0)   // Allow looking up a bit
+                Cesium.Math.toRadians(-20.0),
+                Cesium.Math.toRadians(45.0)
             );
         }
 
-        return changed;
+        return { changed };
     }
 
     /**
@@ -246,19 +181,11 @@ export class CameraSystem {
     }
 
     /**
-     * Gets the ENU transform matrix at player position
-     * @returns {Cesium.Matrix4} The ENU transform matrix
-     */
-    getEnuTransform() {
-        return this.enuTransform;
-    }
-
-    /**
      * Sets the camera distance from the player
      * @param {number} distance - New camera distance
      */
     setDistance(distance) {
-        this.cameraDistance = Math.max(1.0, distance); // Ensure minimum distance
+        this.cameraDistance = Math.max(1.0, distance);
     }
 
     /**
@@ -270,51 +197,42 @@ export class CameraSystem {
     }
 
     /**
-     * Teleports the camera to look at a new player position
-     * Used when changing cities or resetting position
+     * Teleports the camera to a new position
      * @param {Object} playerPosition - New player position in cartographic coordinates
-     * @param {number} heading - New desired camera heading in radians
+     * @param {number} playerHeading - New player heading in radians
      * @param {number} duration - Flight duration in seconds (0 for instant)
      */
-    teleport(playerPosition, heading, duration = 0) {
-        // Reset camera orientation based on provided heading
-        this.cameraHeading = heading;
-        this.cameraPitch = Cesium.Math.toRadians(-15.0); // Reset pitch to default
+    teleport(playerPosition, playerHeading, duration = 0) {
+        this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
+        this.cameraPitch = Cesium.Math.toRadians(0.0);
 
-        // Calculate target player world position
         const targetPlayerWorldPos = Cesium.Cartesian3.fromRadians(
             playerPosition.longitude,
             playerPosition.latitude,
             playerPosition.height
         );
 
-        // Get ENU transform at the target location
         const targetEnuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(targetPlayerWorldPos);
 
-        // Calculate camera offset in local ENU frame at the target location
-        const headingOffset = Math.PI;
         const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
-        const verticalDistance = this.cameraDistance * Math.sin(-this.cameraPitch);
-        const offsetX = horizontalDistance * Math.sin(this.cameraHeading + headingOffset);
-        const offsetY = horizontalDistance * Math.cos(this.cameraHeading + headingOffset);
+        const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
+        const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
+        const offsetY = horizontalDistance * Math.cos(this.cameraHeading);
         const offsetZ = this.cameraHeight + verticalDistance;
         const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
-        // Transform the offset to world coordinates (ECEF vector)
         const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
             targetEnuTransform,
             cameraOffsetENU,
             new Cesium.Cartesian3()
         );
 
-        // Calculate final camera position in world coordinates
         const finalCameraPos = Cesium.Cartesian3.add(
             targetPlayerWorldPos,
             cameraOffsetECEF,
             new Cesium.Cartesian3()
         );
 
-        // Calculate the direction the camera should face (towards the player)
         const finalDirection = Cesium.Cartesian3.subtract(
             targetPlayerWorldPos,
             finalCameraPos,
@@ -322,7 +240,6 @@ export class CameraSystem {
         );
         Cesium.Cartesian3.normalize(finalDirection, finalDirection);
 
-        // Calculate the up vector at the target location
         const finalUp = Cesium.Matrix4.multiplyByPointAsVector(
             targetEnuTransform,
             new Cesium.Cartesian3(0, 0, 1),
@@ -331,33 +248,21 @@ export class CameraSystem {
         Cesium.Cartesian3.normalize(finalUp, finalUp);
 
         if (duration > 0) {
-            // Use flyTo for smooth transition
             this.cesiumCamera.flyTo({
                 destination: finalCameraPos,
                 orientation: {
                     direction: finalDirection,
                     up: finalUp
                 },
-                duration: duration,
-                complete: () => {
-                     // Ensure internal state matches after flight
-                     this.update(playerPosition, heading, {}); // Run update to sync internal vars
-                },
-                cancel: () => {
-                     // Ensure internal state matches if flight is cancelled
-                     this.update(playerPosition, heading, {});
-                }
+                duration: duration
             });
         } else {
-            // Set camera position and orientation directly for instant teleport
             this.cesiumCamera.position = finalCameraPos;
             this.cesiumCamera.direction = finalDirection;
             this.cesiumCamera.up = finalUp;
             this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
             Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
-
-            // Update internal state and sync Three.js camera
-            this.update(playerPosition, heading, {});
+            this.syncThreeCamera();
         }
     }
 }
