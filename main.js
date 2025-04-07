@@ -14,7 +14,6 @@ import {
 } from './helper-functions.js';
 import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
-import { SkyGradient } from './sky-gradient.js';
 import { AnimationSystem } from './animation-system.js';
 
 // --- Cesium Ion Access Token ---
@@ -64,16 +63,13 @@ let lastFpsUpdate = 0;
 let currentFps = 0;
 
 // Three.js and Cesium objects
-let viewer, cesiumCamera, three, osmBuildingsTileset, FrustumCuller, miniMap, cameraSystem, skyGradient;
+let viewer, cesiumCamera, three, osmBuildingsTileset, FrustumCuller, miniMap, cameraSystem;
 
 // --- Game Loop Variables ---
 let lastTime = 0;
 const renderInterval = 1000 / 60; // Target 60 FPS
 let lastRenderTime = 0;
 let needsRender = true;
-
-// Time of day state (for sky gradient coloring)
-let timeOfDay = 'day'; // 'day', 'sunset', 'night', 'sunrise'
 
 /**
  * The main update function, called each frame.
@@ -258,30 +254,24 @@ function update(currentTime) {
         }
     }
 
-    // --- 7. Update Sky Gradient ---
-    if (skyGradient) {
-        skyGradient.update();
-    }
-
     // --- 8. Update Mini-map ---
     miniMap.update(playerPosition, playerHeading);
 
     // --- 9. Render Both Scenes ---
+    /*
     if (three.renderer) {
         three.renderer.clear();
     }
     if (viewer) {
-        viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
     }
+    */
 
     if (three.renderer && three.scene && three.camera) {
-        if (skyGradient && skyGradient.skyMesh) {
-            skyGradient.skyMesh.renderOrder = -1000;
-            skyGradient.skyMesh.material.depthWrite = false;
-        }
         three.renderer.render(three.scene, three.camera);
     }
 
+    // Finally, render Cesium on top
+    viewer.scene.backgroundColor = new Cesium.Color(0.7, 0.85, 0.95, 1);
     viewer.render();
 
     // --- 10. Update Instructions Display ---
@@ -289,39 +279,6 @@ function update(currentTime) {
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
     
     instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
-}
-
-/**
- * Changes the sky colors based on time of day
- * @param {string} timeOfDayValue - 'day', 'sunset', 'night', or 'sunrise'
- */
-function changeTimeOfDay(timeOfDayValue) {
-    if (!skyGradient) {
-        console.warn("Sky gradient not initialized when changing time of day");
-        return;
-    }
-    
-    console.log(`Changing time of day to: ${timeOfDayValue}`);
-    timeOfDay = timeOfDayValue;
-    
-    switch(timeOfDay) {
-        case 'day':
-            skyGradient.setColors(0x0077ff, 0xb0d8ff);
-            break;
-        case 'sunset':
-            skyGradient.setColors(0x2b3043, 0xff7e22);
-            break;
-        case 'night':
-            skyGradient.setColors(0x000011, 0x002244);
-            break;
-        case 'sunrise':
-            skyGradient.setColors(0x0e1a40, 0xff9966);
-            break;
-        default:
-            skyGradient.setColors(0x0077ff, 0xb0d8ff);
-    }
-    
-    needsRender = true;
 }
 
 // --- Initialization Sequence ---
@@ -347,11 +304,17 @@ async function initialize() {
     
     three.renderer.setClearColor(0x000000, 0);
     
-    console.log("Initializing SkyGradient...");
-    skyGradient = new SkyGradient(three.scene, three.camera);
-    changeTimeOfDay('day');
-    console.log("Sky gradient initialized");
+    // Make sure Cesium sky elements are disabled
+    viewer.scene.skyBox = undefined;
+    viewer.scene.skyAtmosphere = undefined;
+    viewer.scene.sun = undefined;
+    viewer.scene.moon = undefined;
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
     
+    // Make sure Three.js renderer has proper settings
+    three.renderer.setClearColor(0x000000, 0);
+    three.renderer.autoClear = false;
+        
     cameraSystem = new CameraSystem(cesiumCamera, three.camera);
     console.log("Camera system initialized");
     
@@ -378,15 +341,12 @@ async function initialize() {
     
     verticalVelocity = verticalVelocityRef.value;
     playerHeading = playerHeadingRef.value;
-    
-    addTimeOfDaySelector();
-    
+        
     try {
         osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
         console.log("Initial setup complete. Starting update loop.");
         
         cameraSystem.teleport(playerPosition, playerHeading, 0);
-        skyGradient.update();
         
         lastTime = performance.now();
         requestAnimationFrame(update);
@@ -398,46 +358,6 @@ async function initialize() {
 }
 
 /**
- * Adds a time of day selector dropdown to the UI
- */
-function addTimeOfDaySelector() {
-    const container = document.createElement('div');
-    container.id = 'timeOfDayContainer';
-    container.style.position = 'absolute';
-    container.style.top = '70px';
-    container.style.right = '10px';
-    container.style.zIndex = '1000';
-    
-    const select = document.createElement('select');
-    select.id = 'timeOfDaySelector';
-    select.style.padding = '5px';
-    select.style.borderRadius = '4px';
-    select.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
-    select.style.border = '1px solid #ccc';
-    
-    const options = [
-        { value: 'day', label: 'Daytime' },
-        { value: 'sunset', label: 'Sunset' },
-        { value: 'night', label: 'Night' },
-        { value: 'sunrise', label: 'Sunrise' }
-    ];
-    
-    options.forEach(opt => {
-        const option = document.createElement('option');
-        option.value = opt.value;
-        option.textContent = opt.label;
-        if (opt.value === timeOfDay) option.selected = true;
-        select.appendChild(option);
-    });
-    
-    select.addEventListener('change', (event) => {
-        changeTimeOfDay(event.target.value);
-    });
-    
-    container.appendChild(select);
-    document.body.appendChild(container);
-}
-
 /**
  * Preloads necessary textures for FBX models
  * This helps ensure textures are available when the model loads
