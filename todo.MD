@@ -59,3 +59,5 @@ Different challenges in each city
 Add billboards or spotlights in cities showing key attractions
 
 Night mode
+
+Toggle building opacity / color

@@ -18,6 +18,8 @@ import { CameraSystem } from './camera-system.js';
 import { AnimationSystem } from './animation-system.js';
 import { TerrainManager } from './terrain-manager.js';
 import { createBuildingColorManager } from './building-shaders.js';
+// Import the new location options module
+import { setupLocationOptions } from './location-options.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -108,10 +110,7 @@ async function initialize() {
     // Create terrain manager with default ground height
     terrainManager = new TerrainManager(viewer, groundHeight);
     console.log("Terrain manager initialized");
-    
-    // viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    //viewer.scene.globe.baseColor = new Cesium.Color(0.45, 0.45, 0.45, 1.0);
-    
+        
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
     if (viewer.scene.sun) viewer.scene.sun.show = false;
@@ -141,6 +140,7 @@ async function initialize() {
     // Initialize fall start time
     fallStateRef.fallStartTime = performance.now();
     
+    // Set up standard input listeners
     setupInputListeners(
         inputState, 
         playerPosition, 
@@ -155,7 +155,25 @@ async function initialize() {
         cameraSystem,
         terrainManager,
         instructionsElement,
-        fallStateRef  // Pass the fall state reference
+        fallStateRef
+    );
+    
+    // Set up the new location options
+    setupLocationOptions(
+        inputState, 
+        playerPosition, 
+        verticalVelocityRef,
+        playerHeadingRef,
+        updateDirectionVectors, 
+        forwardDirection, 
+        rightDirection, 
+        cities, 
+        viewer, 
+        miniMap, 
+        cameraSystem,
+        terrainManager,
+        instructionsElement,
+        fallStateRef
     );
     
     verticalVelocity = verticalVelocityRef.value;
@@ -347,6 +365,7 @@ function setupColorControls(colorManager) {
 
 /**
  * The main update function, called each frame.
+ * @param {number} currentTime - Current timestamp from requestAnimationFrame
  */
 function update(currentTime) {
     requestAnimationFrame(update);
