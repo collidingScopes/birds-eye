@@ -19,6 +19,7 @@ import { TerrainManager } from './terrain-manager.js';
 import { createBuildingColorManager } from './building-shaders.js';
 // Import the new location options module
 import { setupLocationOptions } from './location-options.js';
+import { JumpBoostEffect } from './jump-boost-animation.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -49,6 +50,7 @@ let currentSpeedFactor = 0.0;
 const accelerationRate = 1.0;
 // How quickly player decelerates when not moving (units per second)
 const decelerationRate = 1.0;
+let jumpBoostEffect = null;
 
 // Input state tracking
 const inputState = {
@@ -216,6 +218,10 @@ async function initialize() {
         instructionsElement.innerHTML = "Failed to initialize. Check console for errors.";
         instructionsElement.style.color = 'red';
     }
+
+    // Initialize jump boost effect
+    jumpBoostEffect = new JumpBoostEffect(three.scene);
+    console.log("Jump boost effect initialized");
 }
 
 /**
@@ -350,6 +356,23 @@ function update(currentTime) {
             playerPosition.height += 0.1;
             needsRender = true;
             inputState.jump = false;
+
+            // ADD THIS CODE:
+            // Trigger jump boost effect
+            if (jumpBoostEffect && onSurface) {
+                // Get player position in Three.js coordinates
+                let threePosition = null;
+                
+                if (three.playerMesh) {
+                    // If we have a player mesh, use its position
+                    threePosition = three.playerMesh.position.clone();
+                } else {
+                    // Otherwise create a position at the origin
+                    threePosition = new THREE.Vector3(0, 0, 0);
+                }
+                
+                jumpBoostEffect.triggerJump(threePosition);
+            }
         }
         verticalVelocity += gravity * deltaTime;
     }
@@ -514,6 +537,11 @@ function update(currentTime) {
         miniMap.update(playerPosition, playerHeading);
     }
 
+    if (jumpBoostEffect) {
+        // Use the player mesh position as reference if available
+        const effectPosition = three.playerMesh ? three.playerMesh.position : null;
+        jumpBoostEffect.update(currentTime, effectPosition);
+    }
 
     viewer.scene.globe.show = true;
     if (!buildingColorManager || !buildingColorManager.getSettings().enabled) {
