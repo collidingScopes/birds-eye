@@ -185,7 +185,7 @@ export function setupInputListeners(
             try {
                 // Pre-sample terrain at destination
                 let terrainHeight;
-
+            
                 if (terrainManager) {
                     terrainHeight = await terrainManager.prepareDestination(
                         cityCoords.longitude,
@@ -196,41 +196,41 @@ export function setupInputListeners(
                     console.warn("No terrain manager available, using default ground height");
                     terrainHeight = groundHeight; // Use constant from this file
                 }
-
+            
                 // Reset player state
                 playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
                 playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
-
+            
                 // Set player height for dramatic fall
                 playerPosition.height = DRAMATIC_FALL_HEIGHT; // Use constant from this file
                 console.log(`Setting initial player height to: ${playerPosition.height}m`);
-
+            
                 // Reset fall state
                 fallStateRef.isInInitialFall = true;
                 fallStateRef.initialFallComplete = false;
                 fallStateRef.fallStartTime = performance.now();
-
+            
                 // Reset physics state
                 verticalVelocityRef.value = -10.0;
                 playerHeadingRef.value = Cesium.Math.toRadians(0.0);
-
+            
                 // Update direction vectors
                 updateDirectionVectorsFunc(playerHeadingRef.value, forwardDirection, rightDirection);
-
+            
                 // Reset minimap
                 if (miniMapInstance) {
                     miniMapInstance.update(playerPosition, playerHeadingRef.value);
                 }
-
+            
                 // Update UI
                 if (instructionsElement) {
                     instructionsElement.classList.remove('loading');
-                    instructionsElement.innerHTML = `Teleporting to ${selectedCity}...`;
+                    instructionsElement.innerHTML = `Teleporting to ${selectedCity}... Use WASD to move and Arrow keys to look around while falling!`;
                 }
-
-                // Use camera system for teleportation
+            
+                // Use camera system for teleportation - modified to look down more
                 if (cameraSystemInstance) {
-                    const teleportCameraPitch = Cesium.Math.toRadians(-15);
+                    const teleportCameraPitch = Cesium.Math.toRadians(45); // Looking down more
                     const teleportDuration = 0.0;
                     await cameraSystemInstance.teleport(
                         playerPosition,
@@ -238,9 +238,9 @@ export function setupInputListeners(
                         teleportDuration,
                         teleportCameraPitch
                     );
-                    console.log("Teleportation complete, drama fall active");
+                    console.log("Teleportation complete, dramatic fall active with player control");
                     if (instructionsElement) {
-                        instructionsElement.innerHTML = `Entering ${selectedCity}... Brace for impact!`;
+                        instructionsElement.innerHTML = `Skydiving into ${selectedCity}... Use WASD to move and Arrow keys to look!`;
                     }
                 } else {
                     console.error("Camera System not available for teleport.");

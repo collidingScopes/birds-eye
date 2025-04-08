@@ -202,11 +202,12 @@ async function initialize() {
         console.log(`Initial player height: ${playerPosition.height}m`);
         console.log(`Initial fall state: ${fallStateRef.isInInitialFall}`);
 
-        const initialCameraPitch = Cesium.Math.toRadians(-15);
+        // Start with camera looking downward
+        const initialCameraPitch = Cesium.Math.toRadians(45);
         cameraSystem.teleport(playerPosition, playerHeading, 0, initialCameraPitch);
         cameraSystem.syncThreeCamera();
 
-        instructionsElement.innerHTML = "Entering the city... Brace for impact!";
+        instructionsElement.innerHTML = "Entering the city... Use WASD to move and Arrow keys to look around while falling!";
 
         lastTime = performance.now();
         requestAnimationFrame(update);
@@ -313,19 +314,14 @@ function update(currentTime) {
     lastRenderTime = currentTime;
     needsRender = false;
 
-    if (!fallStateRef.isInInitialFall) {
-        // Use cameraTurnSpeed imported from initial-setup.js
-        const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
-        if (cameraControlResult.changed) {
-            needsRender = true;
-            playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
-            // Use updateDirectionVectors imported from initial-setup.js
-            updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
-        }
-    } else {
-        const fallProgress = Math.min((currentTime - fallStateRef.fallStartTime) / 10000, 1.0);
-        cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45);
+    // MODIFICATION: Allow camera controls during fall
+    // Remove the conditional block and allow camera controls at all times
+    const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
+    if (cameraControlResult.changed) {
         needsRender = true;
+        playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
+        // Use updateDirectionVectors imported from initial-setup.js
+        updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
     }
 
     const buildingCollision = checkBuildingCollision(viewer, playerPosition, osmBuildingsTileset, inputState, buildingCache, 20.0);
@@ -392,59 +388,59 @@ function update(currentTime) {
     let deltaNorth = 0;
     let movedHorizontally = false;
 
-    if (!fallStateRef.isInInitialFall) {
-        const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
-        const movementRight = { x: rightDirection.x, y: rightDirection.y };
+    // MODIFICATION: Allow movement during fall
+    // Remove conditional and process movement at all times
+    const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
+    const movementRight = { x: rightDirection.x, y: rightDirection.y };
 
-        if (inputState.forward) {
-            deltaEast += movementForward.x; deltaNorth += movementForward.y; movedHorizontally = true;
+    if (inputState.forward) {
+        deltaEast += movementForward.x; deltaNorth += movementForward.y; movedHorizontally = true;
+    }
+    if (inputState.backward) {
+        deltaEast -= movementForward.x; deltaNorth -= movementForward.y; movedHorizontally = true;
+    }
+    if (inputState.strafeLeft) {
+        deltaEast -= movementRight.x; deltaNorth -= movementRight.y; movedHorizontally = true;
+    }
+    if (inputState.strafeRight) {
+        deltaEast += movementRight.x; deltaNorth += movementRight.y; movedHorizontally = true;
+    }
+
+    if (movedHorizontally) {
+        needsRender = true;
+        const magnitude = Math.sqrt(deltaEast * deltaEast + deltaNorth * deltaNorth);
+        let normalizedEast = 0;
+        let normalizedNorth = 0;
+
+        if (magnitude > 1e-6) {
+            normalizedEast = deltaEast / magnitude;
+            normalizedNorth = deltaNorth / magnitude;
         }
-        if (inputState.backward) {
-            deltaEast -= movementForward.x; deltaNorth -= movementForward.y; movedHorizontally = true;
-        }
-        if (inputState.strafeLeft) {
-            deltaEast -= movementRight.x; deltaNorth -= movementRight.y; movedHorizontally = true;
-        }
-        if (inputState.strafeRight) {
-            deltaEast += movementRight.x; deltaNorth += movementRight.y; movedHorizontally = true;
-        }
 
-        if (movedHorizontally) {
-            needsRender = true;
-            const magnitude = Math.sqrt(deltaEast * deltaEast + deltaNorth * deltaNorth);
-            let normalizedEast = 0;
-            let normalizedNorth = 0;
+        const finalMoveEast = normalizedEast * moveAmount;
+        const finalMoveNorth = normalizedNorth * moveAmount;
 
-            if (magnitude > 1e-6) {
-                normalizedEast = deltaEast / magnitude;
-                normalizedNorth = deltaNorth / magnitude;
-            }
+        const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
+        const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
+        const moveENU = new Cesium.Cartesian3(finalMoveEast, finalMoveNorth, 0);
+        const moveECEF = Cesium.Matrix4.multiplyByPointAsVector(enuTransform, moveENU, new Cesium.Cartesian3());
+        const newWorldPos = Cesium.Cartesian3.add(playerWorldPos, moveECEF, new Cesium.Cartesian3());
+        const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
 
-            const finalMoveEast = normalizedEast * moveAmount;
-            const finalMoveNorth = normalizedNorth * moveAmount;
+        let allowMove = true;
+        if (allowMove) {
+            playerPosition.longitude = newCartographic.longitude;
+            playerPosition.latitude = newCartographic.latitude;
 
-            const playerWorldPos = Cesium.Cartesian3.fromRadians(playerPosition.longitude, playerPosition.latitude, playerPosition.height);
-            const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
-            const moveENU = new Cesium.Cartesian3(finalMoveEast, finalMoveNorth, 0);
-            const moveECEF = Cesium.Matrix4.multiplyByPointAsVector(enuTransform, moveENU, new Cesium.Cartesian3());
-            const newWorldPos = Cesium.Cartesian3.add(playerWorldPos, moveECEF, new Cesium.Cartesian3());
-            const newCartographic = Cesium.Cartographic.fromCartesian(newWorldPos);
-
-            let allowMove = true;
-            if (allowMove) {
-                playerPosition.longitude = newCartographic.longitude;
-                playerPosition.latitude = newCartographic.latitude;
-
-                if (onSurface && buildingCollision.hit) {
-                    const newPositionCheck = { ...playerPosition }; // Shallow copy
-                    const tempCache = { valid: false, hit: false, height: 0 };
-                    const forcedInputState = { forward: true };
-                    const newBuildingCollision = checkBuildingCollision(
-                        viewer, newPositionCheck, osmBuildingsTileset, forcedInputState, tempCache, 0
-                    );
-                    if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
-                        verticalVelocity = -0.1;
-                    }
+            if (onSurface && buildingCollision.hit) {
+                const newPositionCheck = { ...playerPosition }; // Shallow copy
+                const tempCache = { valid: false, hit: false, height: 0 };
+                const forcedInputState = { forward: true };
+                const newBuildingCollision = checkBuildingCollision(
+                    viewer, newPositionCheck, osmBuildingsTileset, forcedInputState, tempCache, 0
+                );
+                if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
+                    verticalVelocity = -0.1;
                 }
             }
         }
@@ -519,7 +515,8 @@ function update(currentTime) {
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
 
     if (fallStateRef.isInInitialFall) {
-        instructionsElement.innerHTML = `Entering city... Brace for impact!${heightInfo}`;
+        // MODIFICATION: Update instructions to include controls during fall
+        instructionsElement.innerHTML = `Skydiving into city... Use WASD to move and Arrow keys to look around!${heightInfo}`;
     } else {
         // Use getDirection imported from initial-setup.js
         instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump | E: Effects<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
