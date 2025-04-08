@@ -460,8 +460,16 @@ function update(currentTime) {
 
     if (three.playerMesh) {
         const cameraPitch = cameraSystem.getPitch();
+
+        console.log("Player heading: "+playerHeading);
+        console.log("Camera pitch: "+cameraPitch);
+        console.log("Player z rotation: "+three.playerMesh.rotation.z);
+        console.log("Player x rotation: "+three.playerMesh.rotation.x);
+        console.log("Player y rotation: "+three.playerMesh.rotation.y);
+        console.log("Player y position: "+three.playerMesh.position.y);
+
         three.playerMesh.rotation.y = Math.PI - playerHeading;
-        three.playerMesh.rotation.x = Math.PI/2 + cameraPitch;
+        three.playerMesh.rotation.x = Math.PI/2;
 
         function normalizeAngle(angle) {
             return Math.atan2(Math.sin(angle), Math.cos(angle));

@@ -20,6 +20,9 @@ export class CameraSystem {
         // Camera controls
         this.cameraHeading = 0.0; // Radians, clockwise from North
         this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch); // Initial slight look-down angle
+        
+        // Player offset reference point - this is what we'll aim the camera at
+        this.playerReferenceHeight = 0; // Height of the player's "eyes" or reference point above ground
     }
 
     /**
@@ -39,15 +42,21 @@ export class CameraSystem {
         // 2. Get the local ENU frame at player position
         const enuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(playerWorldPos);
 
+        // Create a consistent reference point that's always at the player's "eye level"
+        const playerReferencePoint = Cesium.Matrix4.multiplyByPoint(
+            enuTransform,
+            new Cesium.Cartesian3(0, 0, this.playerReferenceHeight),
+            new Cesium.Cartesian3()
+        );
+
         // 3. Calculate camera offset in local ENU frame
-        // We want the camera to maintain a fixed orbital distance from the player
-        // regardless of pitch angle
+        // Use spherical coordinates to position the camera at a fixed distance
         const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
         const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
 
         const offsetX = horizontalDistance * Math.sin(this.cameraHeading); // East
         const offsetY = horizontalDistance * Math.cos(this.cameraHeading); // North
-        const offsetZ = verticalDistance; // Up - this is purely the vertical component of our spherical coordinate
+        const offsetZ = verticalDistance; // Up - relative to player reference height
 
         const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
@@ -66,9 +75,9 @@ export class CameraSystem {
         );
         this.cesiumCamera.position = cameraWorldPos;
 
-        // 6. Orient camera to look at player
+        // 6. Orient camera to look at player's reference point (not ground position)
         const directionToPlayer = Cesium.Cartesian3.subtract(
-            playerWorldPos,
+            playerReferencePoint,
             cameraWorldPos,
             new Cesium.Cartesian3()
         );
@@ -123,7 +132,9 @@ export class CameraSystem {
                 horizontalDistance * Math.cos(this.cameraHeading),
                 verticalDistance
             );
-            this.threeCamera.lookAt(0, 0, 0);
+            
+            // Look at the player's reference point, not the origin
+            this.threeCamera.lookAt(0, 0, this.playerReferenceHeight);
         }
     }
 
@@ -191,10 +202,11 @@ export class CameraSystem {
      * @param {Object} playerPosition - New player position in cartographic coordinates
      * @param {number} playerHeading - New player heading in radians
      * @param {number} duration - Flight duration in seconds (0 for instant)
+     * @param {number} customPitch - Optional custom pitch angle in radians
      */
     teleport(playerPosition, playerHeading, duration, customPitch = null) {
         this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
-        // Only reset pitch if customPitch is not provided
+        // Only reset pitch if customPitch is provided
         if (customPitch !== null) {
             this.cameraPitch = customPitch;
         } else {
@@ -216,6 +228,13 @@ export class CameraSystem {
 
         const targetEnuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(targetPlayerWorldPos);
 
+        // Create the player reference point at eye level
+        const playerReferencePoint = Cesium.Matrix4.multiplyByPoint(
+            targetEnuTransform,
+            new Cesium.Cartesian3(0, 0, this.playerReferenceHeight),
+            new Cesium.Cartesian3()
+        );
+
         const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
         const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
         const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
@@ -235,8 +254,9 @@ export class CameraSystem {
             new Cesium.Cartesian3()
         );
 
+        // Direct the camera to look at the player's reference point
         const finalDirection = Cesium.Cartesian3.subtract(
-            targetPlayerWorldPos,
+            playerReferencePoint,
             finalCameraPos,
             new Cesium.Cartesian3()
         );
