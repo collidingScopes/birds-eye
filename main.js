@@ -43,6 +43,13 @@ let verticalVelocity = -10.0;
 let forwardDirection = { x: 0, y: 1 }; // Initial: North
 let rightDirection = { x: 1, y: 0 };   // Initial: East
 
+// Current acceleration state (0.0 to 1.0)
+let currentSpeedFactor = 0.0;
+// How quickly player accelerates (units per second)
+const accelerationRate = 1.0;
+// How quickly player decelerates when not moving (units per second)
+const decelerationRate = 1.0;
+
 // Input state tracking
 const inputState = {
     forward: false,     // W
@@ -365,8 +372,22 @@ function update(currentTime) {
 
     needsRender = true;
 
-    // Use playerMoveSpeed imported from initial-setup.js
-    const moveAmount = playerMoveSpeed * deltaTime;
+    // Calculate acceleration/deceleration
+    if (isMoving) {
+        // Accelerate when moving
+        currentSpeedFactor = Math.min(currentSpeedFactor + accelerationRate * deltaTime, 1.0);
+    } else {
+        // Decelerate when not moving
+        currentSpeedFactor = Math.max(currentSpeedFactor - decelerationRate * deltaTime, 0.0);
+    }
+
+    // Apply surface factor if on ground
+    const surfaceSpeedFactor = 0.5; // Adjust as needed (0.5 = half speed)
+    const environmentFactor = onSurface ? surfaceSpeedFactor : 1.0;
+
+    // Calculate final move amount with both acceleration and environment factors
+    const moveAmount = playerMoveSpeed * deltaTime * currentSpeedFactor * environmentFactor;
+
     let deltaEast = 0;
     let deltaNorth = 0;
     let movedHorizontally = false;
