@@ -259,7 +259,7 @@ export function setupInputListeners(
                             pitch: Cesium.Math.toRadians(-30.0), // Look down slightly more during flight
                             roll: 0.0
                         },
-                        duration: 1.5
+                        duration: 0.0
                     });
                 }
                 

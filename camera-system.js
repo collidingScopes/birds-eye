@@ -188,22 +188,6 @@ export class CameraSystem {
     }
 
     /**
-     * Sets the camera distance from the player
-     * @param {number} distance - New camera distance
-     */
-    setDistance(distance) {
-        this.cameraDistance = Math.max(1.0, distance);
-    }
-
-    /**
-     * Sets the camera height offset above the player
-     * @param {number} height - New camera height offset
-     */
-    setHeight(height) {
-        this.cameraHeight = height;
-    }
-
-    /**
      * Teleports the camera to a new position
      * @param {Object} playerPosition - New player position in cartographic coordinates
      * @param {number} playerHeading - New player heading in radians
@@ -266,26 +250,11 @@ export class CameraSystem {
         );
         Cesium.Cartesian3.normalize(finalUp, finalUp);
 
-        if (duration > 0) {
-            this.cesiumCamera.flyTo({
-                destination: finalCameraPos,
-                orientation: {
-                    direction: finalDirection,
-                    up: finalUp
-                },
-                duration: duration,
-                complete: () => {
-                    // Sync camera after flight completes
-                    this.syncThreeCamera();
-                }
-            });
-        } else {
-            this.cesiumCamera.position = finalCameraPos;
-            this.cesiumCamera.direction = finalDirection;
-            this.cesiumCamera.up = finalUp;
-            this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
-            Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
-            this.syncThreeCamera();
-        }
+        this.cesiumCamera.position = finalCameraPos;
+        this.cesiumCamera.direction = finalDirection;
+        this.cesiumCamera.up = finalUp;
+        this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
+        Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+        this.syncThreeCamera();
     }
 }
