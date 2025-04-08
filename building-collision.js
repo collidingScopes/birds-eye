@@ -19,8 +19,8 @@ export function checkBuildingCollision(
     inputState, 
     cache = {}, 
     heightThreshold = 20.0, 
-    maxDistance = 150.0,
-    minMovementDistance = 20.0
+    maxDistance = 100.0,
+    minMovementDistance = 15.0,
 ) {
     // Initialize cache if it's the first call
     if (!cache.initialized) {

@@ -1,4 +1,3 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
 /**
  * CameraSystem class - FIXED
  * Manages camera positioning, orientation, and controls for third-person view

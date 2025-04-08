@@ -2,8 +2,289 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.m
 import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/FBXLoader.js';
 import { AnimationSystem } from './animation-system.js';
 
+// --- Constants previously in helper-functions.js ---
+export const playerMoveSpeed = 80.0;
+export const cameraTurnSpeed = 1.3;
+export const jumpVelocity = 50;
+export const gravity = -50.0;
+export const groundHeight = 0.5;
+// Define fall height constant to reuse
+export const DRAMATIC_FALL_HEIGHT = 2500;
+
+// City Coordinates
+export const cities = {
+    nyc: { longitude: -73.9854, latitude: 40.7580 },
+    london: { longitude: -0.1276, latitude: 51.5074 },
+    tokyo: { longitude: 139.6917, latitude: 35.6895 },
+    paris: { longitude: 2.3522, latitude: 48.8566 },
+    sydney: { longitude: 151.2093, latitude: -33.8688 },
+    montreal: { longitude: -73.5674, latitude: 45.5019 },
+    toronto: { longitude: -79.3832, latitude: 43.6532 },
+    istanbul: { longitude: 28.9784, latitude: 41.0082 },
+    hanoi: { longitude: 105.8342, latitude: 21.0278 },
+    hongkong: { longitude: 114.1694, latitude: 22.3193 },
+    seoul: { longitude: 126.9780, latitude: 37.5665 },
+    shanghai: { longitude: 121.4737, latitude: 31.2304 },
+    sanfrancisco: { longitude: -122.4194, latitude: 37.7749 },
+    berlin: { longitude: 13.4050, latitude: 52.5200 },
+    riodejaneiro: { longitude: -43.1729, latitude: -22.9068 },
+    chicago: { longitude: -87.6298, latitude: 41.8781 },
+    dubai: { longitude: 55.2708, latitude: 25.2048 },
+    kualalumpur: { longitude: 101.6869, latitude: 3.1390 },
+    singapore: { longitude: 103.8198, latitude: 1.3521 },
+};
+// --- End Constants ---
+
+
+// --- Functions previously in helper-functions.js ---
+
+/**
+ * Updates the forwardDirection and rightDirection vectors based on the current playerHeading.
+ * Assumes playerHeading is radians clockwise from North.
+ * Updates vectors in the ENU (East-North-Up) frame.
+ *
+ * @param {number} playerHeading - Player heading in radians
+ * @param {Object} forwardDirection - Forward direction vector to update {x: East, y: North}
+ * @param {Object} rightDirection - Right direction vector to update {x: East, y: North}
+ */
+export function updateDirectionVectors(playerHeading, forwardDirection, rightDirection) {
+    // playerHeading: 0 = North, positive = CLOCKWISE (East=PI/2)
+    // Standard Trig functions: 0 = East, positive = COUNTER-CLOCKWISE (North=PI/2)
+    // Angle for standard trig functions = PI/2 - playerHeading
+    const trigAngle = Cesium.Math.PI_OVER_TWO - playerHeading;
+
+    // Forward direction in ENU (X=East, Y=North)
+    forwardDirection.x = Math.cos(trigAngle);
+    forwardDirection.y = Math.sin(trigAngle);
+    // Ensure normalization (might be redundant if trig functions are precise)
+    const fwdMag = Math.sqrt(forwardDirection.x**2 + forwardDirection.y**2);
+    if (fwdMag > 1e-6) {
+        forwardDirection.x /= fwdMag;
+        forwardDirection.y /= fwdMag;
+    }
+
+
+    // Right direction (relative to forward, 90deg clockwise) in ENU
+    // Rotation matrix for -90 deg: [cos(-90) -sin(-90)] [x] = [ 0  1] [x] = [ y]
+    //                              [sin(-90)  cos(-90)] [y]   [-1  0] [y]   [-x]
+    // So, rightDirection = (forwardDirection.y, -forwardDirection.x)
+    rightDirection.x = forwardDirection.y;
+    rightDirection.y = -forwardDirection.x;
+    // Ensure normalization
+    const rightMag = Math.sqrt(rightDirection.x**2 + rightDirection.y**2);
+     if (rightMag > 1e-6) {
+        rightDirection.x /= rightMag;
+        rightDirection.y /= rightMag;
+    }
+}
+
+/**
+ * Gets cardinal direction name based on heading.
+ * Assumes heading is radians clockwise from North.
+ *
+ * @param {number} headingRad - Heading in radians
+ * @returns {string} Cardinal direction name
+ */
+export function getDirection(headingRad) {
+    const twoPi = 2.0 * Math.PI;
+    // Normalize heading to 0 <= heading < 2*PI
+    let heading = headingRad % twoPi;
+    if (heading < 0) {
+        heading += twoPi;
+    }
+    let degrees = Cesium.Math.toDegrees(heading);
+
+    if (degrees >= 337.5 || degrees < 22.5) return "North";
+    if (degrees >= 22.5 && degrees < 67.5) return "Northeast";
+    if (degrees >= 67.5 && degrees < 112.5) return "East";
+    if (degrees >= 112.5 && degrees < 157.5) return "Southeast";
+    if (degrees >= 157.5 && degrees < 202.5) return "South";
+    if (degrees >= 202.5 && degrees < 247.5) return "Southwest";
+    if (degrees >= 247.5 && degrees < 292.5) return "West";
+    if (degrees >= 292.5 && degrees < 337.5) return "Northwest";
+    return "Unknown"; // Should not happen
+}
+
+/**
+ * Sets up keyboard and city selector listeners.
+ *
+ * @param {Object} inputState - Input state object to modify
+ * @param {Object} playerPosition - Player position object to modify on city change
+ * @param {Object} verticalVelocityRef - Reference object containing vertical velocity { value: number }
+ * @param {Object} playerHeadingRef - Reference object containing player heading { value: number }
+ * @param {Function} updateDirectionVectorsFunc - Function to update direction vectors
+ * @param {Object} forwardDirection - Forward direction vector to update
+ * @param {Object} rightDirection - Right direction vector to update
+ * @param {Object} citiesData - City coordinates object (now defined in this file)
+ * @param {Object} cesiumViewer - Cesium viewer instance
+ * @param {Object} miniMapInstance - Minimap instance
+ * @param {Object} cameraSystemInstance - Camera system instance
+ * @param {Object} terrainManager - Terrain manager instance
+ * @param {HTMLElement} instructionsElement - Element to display instructions
+ * @param {Object} fallStateRef - Reference to the dramatic fall state variables
+ */
+export function setupInputListeners(
+    inputState, playerPosition, verticalVelocityRef, playerHeadingRef,
+    updateDirectionVectorsFunc, forwardDirection, rightDirection,
+    citiesData, cesiumViewer, miniMapInstance, cameraSystemInstance,
+    terrainManager, instructionsElement, fallStateRef
+) {
+    // NOTE: citiesData is now the 'cities' constant defined in this file
+    // groundHeight and DRAMATIC_FALL_HEIGHT are also defined in this file
+
+    const citySelector = document.getElementById('citySelector');
+
+    document.addEventListener('keydown', (event) => {
+        const key = event.key.toUpperCase();
+        let handled = true; // Flag to prevent default browser actions like scrolling
+        switch (key) {
+            case 'W': inputState.forward = true; break;
+            case 'S': inputState.backward = true; break;
+            case 'A': inputState.strafeLeft = true; break;
+            case 'D': inputState.strafeRight = true; break;
+            // --- Camera Controls (Arrows) - These only affect camera, not player ---
+            case 'ARROWLEFT': inputState.left = true; break; // Camera turn Left
+            case 'ARROWRIGHT': inputState.right = true; break; // Camera turn Right
+            case 'ARROWUP': inputState.up = true; break; // Camera pitch up
+            case 'ARROWDOWN': inputState.down = true; break; // Camera pitch down
+            case ' ': inputState.jump = true; break; // Mark intent to jump
+            default: handled = false; break; // Don't prevent default for other keys
+        }
+        if (handled) event.preventDefault(); // Prevent scrolling with arrow/space keys
+    });
+
+    document.addEventListener('keyup', (event) => {
+        const key = event.key.toUpperCase();
+        switch (key) {
+            case 'W': inputState.forward = false; break;
+            case 'S': inputState.backward = false; break;
+            case 'A': inputState.strafeLeft = false; break;
+            case 'D': inputState.strafeRight = false; break;
+            case 'ARROWLEFT': inputState.left = false; break;
+            case 'ARROWRIGHT': inputState.right = false; break;
+            case 'ARROWUP': inputState.up = false; break;
+            case 'ARROWDOWN': inputState.down = false; break;
+            // Note: We handle the jump action in the update loop based on the 'true' state
+        }
+    });
+
+    // City selection logic
+    citySelector.addEventListener('change', async (event) => {
+        const selectedCity = event.target.value;
+        // Check against the 'cities' constant defined in this file
+        if (cities[selectedCity]) {
+            console.log(`Changing city to: ${selectedCity}`);
+            const cityCoords = cities[selectedCity];
+
+            // Update UI to show loading state
+            if (instructionsElement) {
+                instructionsElement.innerHTML = `Loading ${selectedCity}...`;
+                instructionsElement.classList.add('loading');
+            }
+
+            try {
+                // Pre-sample terrain at destination
+                let terrainHeight;
+
+                if (terrainManager) {
+                    terrainHeight = await terrainManager.prepareDestination(
+                        cityCoords.longitude,
+                        cityCoords.latitude
+                    );
+                    console.log(`Terrain height at ${selectedCity}: ${terrainHeight}m`);
+                } else {
+                    console.warn("No terrain manager available, using default ground height");
+                    terrainHeight = groundHeight; // Use constant from this file
+                }
+
+                // Reset player state
+                playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
+                playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
+
+                // Set player height for dramatic fall
+                playerPosition.height = DRAMATIC_FALL_HEIGHT; // Use constant from this file
+                console.log(`Setting initial player height to: ${playerPosition.height}m`);
+
+                // Reset fall state
+                fallStateRef.isInInitialFall = true;
+                fallStateRef.initialFallComplete = false;
+                fallStateRef.fallStartTime = performance.now();
+
+                // Reset physics state
+                verticalVelocityRef.value = -10.0;
+                playerHeadingRef.value = Cesium.Math.toRadians(0.0);
+
+                // Update direction vectors
+                updateDirectionVectorsFunc(playerHeadingRef.value, forwardDirection, rightDirection);
+
+                // Reset minimap
+                if (miniMapInstance) {
+                    miniMapInstance.update(playerPosition, playerHeadingRef.value);
+                }
+
+                // Update UI
+                if (instructionsElement) {
+                    instructionsElement.classList.remove('loading');
+                    instructionsElement.innerHTML = `Teleporting to ${selectedCity}...`;
+                }
+
+                // Use camera system for teleportation
+                if (cameraSystemInstance) {
+                    const teleportCameraPitch = Cesium.Math.toRadians(-15);
+                    const teleportDuration = 0.0;
+                    await cameraSystemInstance.teleport(
+                        playerPosition,
+                        playerHeadingRef.value,
+                        teleportDuration,
+                        teleportCameraPitch
+                    );
+                    console.log("Teleportation complete, drama fall active");
+                    if (instructionsElement) {
+                        instructionsElement.innerHTML = `Entering ${selectedCity}... Brace for impact!`;
+                    }
+                } else {
+                    console.error("Camera System not available for teleport.");
+                    const targetWorldPos = Cesium.Cartesian3.fromRadians(
+                        playerPosition.longitude, playerPosition.latitude, playerPosition.height
+                    );
+                    await cesiumViewer.camera.flyTo({
+                        destination: targetWorldPos,
+                        orientation: {
+                            heading: playerHeadingRef.value,
+                            pitch: Cesium.Math.toRadians(-30.0),
+                            roll: 0.0
+                        },
+                        duration: 0.0
+                    });
+                }
+
+            } catch (error) {
+                console.error(`Error teleporting to ${selectedCity}:`, error);
+                playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
+                playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
+                playerPosition.height = groundHeight + 1.0; // Use constant from this file
+                verticalVelocityRef.value = 0;
+                if (instructionsElement) {
+                    instructionsElement.classList.remove('loading');
+                    instructionsElement.innerHTML = `Error loading ${selectedCity}. Using default elevation.`;
+                    setTimeout(() => {
+                        instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump`;
+                    }, 3000);
+                }
+                if (cameraSystemInstance) {
+                    cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.0);
+                }
+            }
+        }
+    });
+}
+// --- End Functions ---
+
+
+// --- Original initial-setup.js content starts here ---
+
 // Performance Settings
-const tilesMaximumScreenSpaceError = 50;
+const tilesMaximumScreenSpaceError = 50; // This is defined above now, keep one definition
 const enableFrustumCulling = true;
 const enableLOD = true;
 
@@ -12,15 +293,15 @@ const enableLOD = true;
  * @returns {Object} Three.js objects and animation system
  */
 export async function initThree() {
-    const three = { 
-        scene: null, 
-        camera: null, 
-        renderer: null, 
+    const three = {
+        scene: null,
+        camera: null,
+        renderer: null,
         playerMesh: null,
         animationSystem: null,
         clock: new THREE.Clock()
     };
-    
+
     const scene = new THREE.Scene();
     const canvas = document.getElementById('threeCanvas');
 
@@ -54,29 +335,29 @@ export async function initThree() {
             animations: playerMesh.animations ? playerMesh.animations.length : 0,
             geometry: playerMesh.children.some(c => c.geometry !== undefined)
         });
-        
+
         // Center the model properly
         const box = new THREE.Box3().setFromObject(playerMesh);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3());
         console.log("Model dimensions:", size);
-        
+
         playerMesh.position.x = -center.x;
         playerMesh.position.y = -center.y;
         playerMesh.position.z = -center.z;
-        
+
         const scale = 1.2;
         playerMesh.scale.set(scale, scale, scale);
 
         playerMesh.rotation.set(0, Math.PI, 0); // Rotate 180 degrees so back faces camera
         playerMesh.position.set(0, -size.y/2, 0); // Adjust to stand on ground
-        
+
         // Make sure the model is visible
         playerMesh.traverse(function(child) {
             if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
-                
+
                 // Check if material exists and is properly configured
                 if (child.material) {
                     if (Array.isArray(child.material)) {
@@ -93,20 +374,20 @@ export async function initThree() {
                 }
             }
         });
-        
+
         // Add the model to the scene
         scene.add(playerMesh);
         three.playerMesh = playerMesh;
         console.log("FBX player model added to scene successfully.");
-        
+
         // Initialize animation system
         const animationSystem = new AnimationSystem(scene, playerMesh);
         three.animationSystem = animationSystem;
-        
+
         // Load all animations
         await animationSystem.loadAllAnimations(loader);
         console.log("Animations loaded successfully.");
-        
+
     } catch (error) {
         console.error("Failed to load FBX model:", error);
         // Fallback to cylinder if FBX fails to load
@@ -124,7 +405,7 @@ export async function initThree() {
     scene.add(camera);
     three.scene = scene;
     console.log("Three.js scene initialized.");
-    
+
     return three;
 }
 
@@ -134,22 +415,22 @@ export async function initThree() {
  */
 export function initCesium() {
     // Performance Settings
-    const tilesMaximumScreenSpaceError = 50;
-    const enableFrustumCulling = true;
+    // const tilesMaximumScreenSpaceError = 50; // Defined above
+    // const enableFrustumCulling = true; // Defined above
 
     const viewer = new Cesium.Viewer('cesiumContainer', {
         animation: false,
         fullscreenButton: false,
         geocoder: false,
-        homeButton: false, 
-        infoBox: false, 
-        sceneModePicker: false, 
+        homeButton: false,
+        infoBox: false,
+        sceneModePicker: false,
         selectionIndicator: false,
-        timeline: false, 
-        navigationHelpButton: false, 
+        timeline: false,
+        navigationHelpButton: false,
         scene3DOnly: true,
         useDefaultRenderLoop: false,
-        maximumScreenSpaceError: tilesMaximumScreenSpaceError,
+        maximumScreenSpaceError: tilesMaximumScreenSpaceError, // Use constant defined above
         requestRenderMode: false,
         baselayer: false,
         baseLayerPicker: false,
@@ -180,29 +461,26 @@ export function initCesium() {
           });
           viewer.terrainProvider = terrainProvider;
           console.log("Cesium World Terrain successfully initialized");
-          
+
           // Ensure terrain is enabled with correct settings
           viewer.scene.globe.enableLighting = false;
           viewer.scene.globe.depthTestAgainstTerrain = true;
           viewer.scene.logarithmicDepthBuffer = false; // Try disabling for better terrain rendering
-          
-          // Set terrain exaggeration to make elevation more visible if needed
-          // viewer.scene.verticalExaggeration = 1.5; // Optional: exaggerate heights by 50%
-          
+
         } catch (error) {
           console.error("Failed to initialize Cesium World Terrain:", error);
         }
     })();
-      
+
     // After viewer creation, verify and adjust the imagery layers:
     console.log("Imagery layers count:", viewer.imageryLayers.length);
     if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
         const baseLayer = viewer.imageryLayers.get(0);
-        
+
         // Ensure layer isn't accidentally hidden or modified
         baseLayer.show = true;
         baseLayer.alpha = 1.0;
-        
+
         // Apply enhancements for visibility
         baseLayer.brightness = 2.0;  // Increase brightness
         baseLayer.contrast = 1.2;    // Increase contrast
@@ -212,73 +490,60 @@ export function initCesium() {
     if (viewer.scene.skyBox) {
         viewer.scene.skyBox.show = false;
     }
-    
+
     if (viewer.scene.skyAtmosphere) {
         viewer.scene.skyAtmosphere.show = false;
     }
-    
+
     if (viewer.scene.sun) {
         viewer.scene.sun.show = false;
     }
-    
+
     if (viewer.scene.moon) {
         viewer.scene.moon.show = false;
     }
-    
+
     // Set a transparent background
     viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    
+
     // Set globe base color to be transparent when no imagery is available
     viewer.scene.globe.baseColor = new Cesium.Color(1, 1, 1, 0.0);
-
-    // DO NOT remove imagery layers - this was causing the issue
-    // This section has been removed/commented out
-    // if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
-    //     viewer.imageryLayers.removeAll();
-    // }
 
     // Enhance the imagery appearance
     if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
         const baseLayer = viewer.imageryLayers.get(0);
-        baseLayer.brightness = 1.1;  // Slightly brighter
-        baseLayer.contrast = 1.1;    // Slightly more contrast
-        baseLayer.gamma = 1.05;      // Slightly adjust gamma
+        baseLayer.brightness = 1.1;
+        baseLayer.contrast = 1.1;
+        baseLayer.gamma = 1.05;
     }
 
     // === DISABLE ALL CESIUM CONTROLS ===
-    // 1. Disable the screenSpaceCameraController completely
     viewer.scene.screenSpaceCameraController.enableRotate = false;
     viewer.scene.screenSpaceCameraController.enableTranslate = false;
     viewer.scene.screenSpaceCameraController.enableZoom = false;
     viewer.scene.screenSpaceCameraController.enableTilt = false;
     viewer.scene.screenSpaceCameraController.enableLook = false;
     viewer.scene.screenSpaceCameraController.enableInputs = false;
-    
-    // 2. Block direct mouse/touch events on the Cesium container
+
     const cesiumContainer = document.getElementById('cesiumContainer');
     if (cesiumContainer) {
-        // List of events to prevent default behavior
         const eventsToBlock = [
-            'wheel', 'mousedown', 'mousemove', 'mouseup', 
+            'wheel', 'mousedown', 'mousemove', 'mouseup',
             'touchstart', 'touchmove', 'touchend'
         ];
-        
         eventsToBlock.forEach(eventType => {
             cesiumContainer.addEventListener(eventType, (event) => {
-                // Allow events for UI elements like city selector
-                if (event.target.id === 'citySelector' || 
-                    event.target.id === 'instructions' || 
+                if (event.target.id === 'citySelector' ||
+                    event.target.id === 'instructions' ||
                     event.target.id === 'fpsCounter') {
                     return;
                 }
-                // Block event propagation and default behavior
                 event.stopPropagation();
                 event.preventDefault();
             }, { passive: false });
         });
     }
-    
-    // 3. Add CSS to disable pointer events on Cesium elements
+
     const style = document.createElement('style');
     style.textContent = `
         #cesiumContainer .cesium-viewer-cesiumWidgetContainer {
@@ -292,9 +557,8 @@ export function initCesium() {
         }
     `;
     document.head.appendChild(style);
-    
+
     console.log("All Cesium camera controls have been disabled");
-    // === END DISABLE CONTROLS ===
 
     viewer.scene.globe.depthTestAgainstTerrain = true;
     const cesiumCamera = viewer.camera;
@@ -332,29 +596,22 @@ export function initCesium() {
         setTimeout(() => FrustumCuller.init(cesiumCamera), 100);
     }
 
-    // Critical settings for proper imagery display
-    viewer.scene.globe.enableLighting = false;   // Disable lighting to prevent color shifts
-    viewer.scene.fog.enabled = false;            // Disable fog to prevent it from blocking view
-    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);  // Transparent background for the sky
-    viewer.scene.globe.showGroundAtmosphere = false;  // Disable ground atmosphere
+    viewer.scene.globe.enableLighting = false;
+    viewer.scene.fog.enabled = false;
+    viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
+    viewer.scene.globe.showGroundAtmosphere = false;
+    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);
+    viewer.scene.globe.translucency.enabled = false;
+    viewer.scene.globe.show = true;
 
-    // IMPORTANT - Set this to a visible color instead of transparent
-    viewer.scene.globe.baseColor = new Cesium.Color(0.5, 0.5, 0.5, 1.0);  
-
-    // Make sure globe is visible and properly configured
-    viewer.scene.globe.translucency.enabled = false; // Don't need globe translucency
-    viewer.scene.globe.show = true;  // Ensure the globe is visible
-
-    // Make sure imagery is properly loaded and shown
     if (viewer.imageryLayers && viewer.imageryLayers.length > 0) {
         const baseLayer = viewer.imageryLayers.get(0);
-        baseLayer.alpha = 1.0;  // Ensure 100% opacity
-        baseLayer.brightness = 1.1;  // Slightly brighter
-        baseLayer.contrast = 1.1;    // Slightly more contrast
-        baseLayer.gamma = 1.05;      // Slightly adjust gamma
+        baseLayer.alpha = 1.0;
+        baseLayer.brightness = 1.1;
+        baseLayer.contrast = 1.1;
+        baseLayer.gamma = 1.05;
     }
 
-    // Make sure no leftover atmosphere exists
     viewer.scene.skyAtmosphere = undefined;
 
     return { viewer, cesiumCamera, FrustumCuller };
@@ -368,8 +625,7 @@ export function initCesium() {
 export async function loadOsmBuildings(viewer, instructionsElement) {
     try {
         const osmBuildingsTileset = await Cesium.Cesium3DTileset.fromIonAssetId(96188, {
-            maximumScreenSpaceError: tilesMaximumScreenSpaceError,
-            // Removed maximumMemoryUsage as it's not valid in Cesium 1.119
+            maximumScreenSpaceError: tilesMaximumScreenSpaceError, // Use constant defined above
             cullWithChildrenBounds: true,
             skipLevelOfDetail: false,
             preferLeaves: true
@@ -386,7 +642,7 @@ export async function loadOsmBuildings(viewer, instructionsElement) {
         }
 
         instructionsElement.innerHTML = "W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: North";
-        
+
         return osmBuildingsTileset;
     } catch (error) {
         console.error(`Error loading Cesium OSM Buildings: ${error}`);
@@ -411,6 +667,6 @@ function setupLOD(tileset) {
     tileset.dynamicScreenSpaceErrorDensity = 0.00278;
     tileset.dynamicScreenSpaceErrorFactor = 4.0;
     tileset.dynamicScreenSpaceErrorHeightFalloff = 0.25;
-    tileset.maximumScreenSpaceError = tilesMaximumScreenSpaceError;
+    tileset.maximumScreenSpaceError = tilesMaximumScreenSpaceError; // Use constant defined above
     console.log("LOD configured for tileset.");
 }

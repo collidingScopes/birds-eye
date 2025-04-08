@@ -1,21 +1,24 @@
 // Import Three.js as an ES Module
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
-import { initThree, initCesium, loadOsmBuildings } from './initial-setup.js';
-import { 
-    updateDirectionVectors, 
-    setupInputListeners, 
-    getDirection, 
-    playerMoveSpeed, 
+// Updated import: Combine imports from initial-setup.js and remove helper-functions.js import
+import {
+    initThree,
+    initCesium,
+    loadOsmBuildings,
+    updateDirectionVectors,
+    setupInputListeners,
+    getDirection,
+    playerMoveSpeed,
     cameraTurnSpeed,
     jumpVelocity,
     gravity,
     groundHeight,
     cities,
     DRAMATIC_FALL_HEIGHT // Import the fall height constant
-} from './helper-functions.js';
+} from './initial-setup.js';
 import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
-import { AnimationSystem } from './animation-system.js';
+import { AnimationSystem } from './animation-system.js'; // This might be redundant if handled inside initThree
 import { TerrainManager } from './terrain-manager.js';
 import { createBuildingColorManager } from './building-shaders.js';
 // Import the new location options module
@@ -27,9 +30,9 @@ Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOi
 // --- State Variables ---
 // DRAMATIC FALL: Set initial height much higher
 let playerPosition = Cesium.Cartographic.fromDegrees(
-    cities.nyc.longitude, 
-    cities.nyc.latitude, 
-    groundHeight + DRAMATIC_FALL_HEIGHT
+    cities.nyc.longitude,
+    cities.nyc.latitude,
+    groundHeight + DRAMATIC_FALL_HEIGHT // Use constants imported from initial-setup.js
 );
 let terrainManager;
 
@@ -38,7 +41,7 @@ let terrainManager;
 // 0 radians = North, PI/2 = East, PI = South, 3*PI/2 = West
 let playerHeading = Cesium.Math.toRadians(0.0); // Start facing North
 // DRAMATIC FALL: Start with negative vertical velocity to accelerate the initial drop
-let verticalVelocity = -10.0; 
+let verticalVelocity = -10.0;
 
 // Direction vectors in Cesium's East-North-Up (ENU) frame (X=East, Y=North)
 let forwardDirection = { x: 0, y: 1 }; // Initial: North
@@ -58,7 +61,6 @@ const inputState = {
 };
 
 // --- DRAMATIC FALL state reference ---
-// Create an object reference so we can pass it to functions and update it
 const fallStateRef = {
     isInInitialFall: true,           // Start in fall mode
     initialFallComplete: false,
@@ -97,125 +99,113 @@ let needsRender = true;
 // --- Initialization Sequence ---
 async function initialize() {
     console.log("Starting initialization sequence...");
-    
-    three = await initThree();
+
+    three = await initThree(); // initThree is imported from initial-setup.js
     console.log("Three.js initialized");
-    
-    const result = initCesium();
+
+    const result = initCesium(); // initCesium is imported from initial-setup.js
     viewer = result.viewer;
     cesiumCamera = result.cesiumCamera;
     FrustumCuller = result.FrustumCuller;
     console.log("Cesium initialized");
 
-    // Create terrain manager with default ground height
+    // Create terrain manager with default ground height (imported from initial-setup.js)
     terrainManager = new TerrainManager(viewer, groundHeight);
     console.log("Terrain manager initialized");
-        
+
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
     if (viewer.scene.sun) viewer.scene.sun.show = false;
     if (viewer.scene.moon) viewer.scene.moon.show = false;
 
-    // Make sure Cesium sky elements are disabled
     viewer.scene.skyBox = undefined;
     viewer.scene.skyAtmosphere = undefined;
     viewer.scene.sun = undefined;
     viewer.scene.moon = undefined;
     viewer.scene.backgroundColor = new Cesium.Color(0, 0, 0, 0);
-    
-    // Make sure Three.js renderer has proper settings
+
     three.renderer.setClearColor(0x000000, 0);
     three.renderer.autoClear = false;
-        
+
     cameraSystem = new CameraSystem(cesiumCamera, three.camera);
     console.log("Camera system initialized");
-    
-    miniMap = new MiniMap(1000);
-    
+
+    miniMap = new MiniMap(1000); // Assuming MiniMap is defined elsewhere or in a script tag
+
+    // Use updateDirectionVectors imported from initial-setup.js
     updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
-    
+
     const verticalVelocityRef = { value: verticalVelocity };
     const playerHeadingRef = { value: playerHeading };
-    
-    // Initialize fall start time
+
     fallStateRef.fallStartTime = performance.now();
-    
-    // Set up standard input listeners
+
+    // Set up standard input listeners using function imported from initial-setup.js
     setupInputListeners(
-        inputState, 
-        playerPosition, 
+        inputState,
+        playerPosition,
         verticalVelocityRef,
         playerHeadingRef,
-        updateDirectionVectors, 
-        forwardDirection, 
-        rightDirection, 
-        cities, 
-        viewer, 
-        miniMap, 
+        updateDirectionVectors, // Pass the function reference
+        forwardDirection,
+        rightDirection,
+        cities, // Pass the cities object imported from initial-setup.js
+        viewer,
+        miniMap,
         cameraSystem,
         terrainManager,
         instructionsElement,
         fallStateRef
     );
-    
+
     // Set up the new location options
     setupLocationOptions(
-        inputState, 
-        playerPosition, 
+        inputState,
+        playerPosition,
         verticalVelocityRef,
         playerHeadingRef,
-        updateDirectionVectors, 
-        forwardDirection, 
-        rightDirection, 
-        cities, 
-        viewer, 
-        miniMap, 
+        updateDirectionVectors, // Pass the function reference
+        forwardDirection,
+        rightDirection,
+        cities, // Pass the cities object imported from initial-setup.js
+        viewer,
+        miniMap,
         cameraSystem,
         terrainManager,
         instructionsElement,
         fallStateRef
     );
-    
+
     verticalVelocity = verticalVelocityRef.value;
     playerHeading = playerHeadingRef.value;
-        
+
     try {
-        // Load OSM buildings tileset
+        // Load OSM buildings tileset using function imported from initial-setup.js
         osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
-        
-        // Initialize building color manager with error handling
+
         try {
             buildingColorManager = createBuildingColorManager(viewer, osmBuildingsTileset);
             console.log("Building color manager initialized");
-            
-            // Setup color controls
             setupColorControls(buildingColorManager);
         } catch (colorError) {
             console.warn("Failed to initialize building color manager:", colorError);
             console.log("Game will continue without color effects");
-            
-            // Hide color controls if they exist
             const colorControls = document.getElementById('colorControls');
             if (colorControls) {
                 colorControls.style.display = 'none';
             }
         }
-        
+
         console.log("Initial setup complete. Starting update loop.");
-        
-        // Verify player height is set properly
         console.log(`Initial player height: ${playerPosition.height}m`);
         console.log(`Initial fall state: ${fallStateRef.isInInitialFall}`);
-        
-        // DRAMATIC FALL: Use a special camera setup for the fall
-        // Set camera to look slightly downward at the start of the fall
-        const initialCameraPitch = Cesium.Math.toRadians(-15); // Look down from above
+
+        const initialCameraPitch = Cesium.Math.toRadians(-15);
         cameraSystem.teleport(playerPosition, playerHeading, 0, initialCameraPitch);
         cameraSystem.syncThreeCamera();
-        
-        // DRAMATIC FALL: Display special instructions for the dramatic fall
+
         instructionsElement.innerHTML = "Entering the city... Brace for impact!";
-        
+
         lastTime = performance.now();
         requestAnimationFrame(update);
     } catch (error) {
@@ -231,10 +221,11 @@ async function initialize() {
  */
 function setupColorControls(colorManager) {
     let toggleButton = document.getElementById('toggleShader');
-    
-    if (!toggleButton || !colorInfo) {
+    const colorInfo = document.getElementById('colorInfo'); // Assuming this might exist
+
+    if (!toggleButton) { // Removed check for colorInfo as it wasn't used below
         console.warn("Color UI elements not found");
-        
+
         // Create UI elements if they don't exist
         const controlsDiv = document.createElement('div');
         controlsDiv.id = 'colorControls';
@@ -243,20 +234,17 @@ function setupColorControls(colorManager) {
             <button id="toggleShader" class="shader-button">Enable Futuristic Mode (E)</button>
         `;
         document.body.appendChild(controlsDiv);
-        
-        // Try again with newly created elements
+
         toggleButton = document.getElementById('toggleShader');
-        
+
         if (!toggleButton) {
             console.error("Failed to create color UI elements");
             return;
         }
     }
-    
-    // Update button text and style based on current state
+
     function updateButtonState() {
         const settings = colorManager.getSettings();
-        
         if (settings.enabled) {
             toggleButton.textContent = `Disable Futuristic Mode (E)`;
             toggleButton.classList.add('active');
@@ -265,14 +253,12 @@ function setupColorControls(colorManager) {
             toggleButton.classList.remove('active');
         }
     }
-    
-    // Button click handler
+
     toggleButton.addEventListener('click', () => {
         colorManager.toggle();
         updateButtonState();
     });
-    
-    // Add keyboard shortcut (E key)
+
     document.addEventListener('keydown', (event) => {
         if (event.key.toUpperCase() === 'E') {
             colorManager.toggle();
@@ -280,8 +266,7 @@ function setupColorControls(colorManager) {
             event.preventDefault();
         }
     });
-    
-    // Initialize button state
+
     updateButtonState();
 }
 
@@ -292,11 +277,9 @@ function setupColorControls(colorManager) {
 function update(currentTime) {
     requestAnimationFrame(update);
 
-    // Calculate delta time, capping it to prevent large jumps on lag
     const deltaTime = Math.min((currentTime - (lastTime || currentTime)) / 1000.0, 0.1);
     lastTime = currentTime;
 
-    // --- FPS Counter ---
     frameCount++;
     if (currentTime - lastFpsUpdate >= 1000) {
         currentFps = Math.round(frameCount * 1000 / (currentTime - lastFpsUpdate));
@@ -305,14 +288,13 @@ function update(currentTime) {
         lastFpsUpdate = currentTime;
     }
 
-    // --- Check if update logic needs to run ---
     const isMoving = inputState.forward || inputState.backward || inputState.strafeLeft || inputState.strafeRight;
     const isTurning = inputState.left || inputState.right;
     const isPitching = inputState.up || inputState.down;
     const isJumping = inputState.jump;
+    // Use groundHeight imported from initial-setup.js
     const physicsActive = verticalVelocity !== 0 || (playerPosition && playerPosition.height > groundHeight + 0.1);
-    
-    // DRAMATIC FALL: Always render during fall
+
     if (fallStateRef.isInInitialFall) {
         needsRender = true;
     }
@@ -329,71 +311,58 @@ function update(currentTime) {
     lastRenderTime = currentTime;
     needsRender = false;
 
-    // --- 1. Update Camera Controls (Arrow Keys) and synchronize player orientation ---
-    // DRAMATIC FALL: Disable camera controls during fall
     if (!fallStateRef.isInInitialFall) {
+        // Use cameraTurnSpeed imported from initial-setup.js
         const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
         if (cameraControlResult.changed) {
             needsRender = true;
-            
-            // Synchronize player heading to always face away from camera
             playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
+            // Use updateDirectionVectors imported from initial-setup.js
             updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
         }
     } else {
-        // DRAMATIC FALL: During fall, gradually adjust camera pitch to look more at the ground
-        const fallProgress = Math.min((currentTime - fallStateRef.fallStartTime) / 10000, 1.0); // 10 seconds to reach max look-down
-        cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45); // Gradually pitch 50 to 5 degrees
+        const fallProgress = Math.min((currentTime - fallStateRef.fallStartTime) / 10000, 1.0);
+        cameraSystem.cameraPitch = Cesium.Math.toRadians(50 - fallProgress * 45);
         needsRender = true;
     }
 
-    // --- 2. Handle Jumping and Gravity ---
     const buildingCollision = checkBuildingCollision(viewer, playerPosition, osmBuildingsTileset, inputState, buildingCache, 20.0);
-
-    // Get the surface height by checking both terrain and buildings
     const surfaceHeight = terrainManager.getSurfaceHeight(playerPosition, buildingCollision);
-
-    // Check if player is on a surface (ground or building)
     const onSurface = terrainManager.isOnSurface(playerPosition, verticalVelocity, buildingCollision);
 
-    // DRAMATIC FALL: Handle the landing from the fall
     if (fallStateRef.isInInitialFall && (
-        onSurface || 
-        playerPosition.height <= surfaceHeight || 
+        onSurface ||
+        playerPosition.height <= surfaceHeight ||
         Math.abs(playerPosition.height - surfaceHeight) < 0.1 ||
         playerPosition.height <= 0
     )) {
         console.log("Fall complete! Landing detected.");
         fallStateRef.isInInitialFall = false;
         fallStateRef.initialFallComplete = true;
-        // Ensure player is exactly at surface height
         playerPosition.height = surfaceHeight;
     }
 
-    // DRAMATIC FALL: During fall, increase vertical velocity for more dramatic effect
+    // Use gravity imported from initial-setup.js
     if (fallStateRef.isInInitialFall) {
-        verticalVelocity += gravity * deltaTime * 1.5; // 1.5x normal gravity for more dramatic fall
+        verticalVelocity += gravity * deltaTime * 1.5;
     } else {
-        // Normal jump handling
         if (inputState.jump) {
+            // Use jumpVelocity imported from initial-setup.js
             verticalVelocity = jumpVelocity;
             playerPosition.height += 0.1;
             needsRender = true;
-            inputState.jump = false; // Consume jump input
+            inputState.jump = false;
         }
-
         verticalVelocity += gravity * deltaTime;
     }
-    
+
     playerPosition.height += verticalVelocity * deltaTime;
 
     if (playerPosition.height < surfaceHeight) {
         playerPosition.height = surfaceHeight;
-        
-        // DRAMATIC FALL: Add a small bounce effect when landing from the fall
         if (fallStateRef.isInInitialFall || (fallStateRef.initialFallComplete && Math.abs(verticalVelocity) > 20)) {
-            verticalVelocity = Math.abs(verticalVelocity) * -0.2; // 20% bounce
-            fallStateRef.initialFallComplete = false; // Reset once we've applied the bounce
+            verticalVelocity = Math.abs(verticalVelocity) * -0.2;
+            fallStateRef.initialFallComplete = false;
         } else {
             verticalVelocity = 0;
         }
@@ -401,37 +370,27 @@ function update(currentTime) {
 
     needsRender = true;
 
-    // --- 3. Update Player Horizontal Position (W/S/A/D for Movement) ---
-    // DRAMATIC FALL: Disable movement controls during fall
+    // Use playerMoveSpeed imported from initial-setup.js
     const moveAmount = playerMoveSpeed * deltaTime;
     let deltaEast = 0;
     let deltaNorth = 0;
     let movedHorizontally = false;
 
     if (!fallStateRef.isInInitialFall) {
-        // Use player heading for movement direction (aligned with camera)
         const movementForward = { x: forwardDirection.x, y: forwardDirection.y };
         const movementRight = { x: rightDirection.x, y: rightDirection.y };
 
         if (inputState.forward) {
-            deltaEast += movementForward.x;
-            deltaNorth += movementForward.y;
-            movedHorizontally = true;
+            deltaEast += movementForward.x; deltaNorth += movementForward.y; movedHorizontally = true;
         }
         if (inputState.backward) {
-            deltaEast -= movementForward.x;
-            deltaNorth -= movementForward.y;
-            movedHorizontally = true;
+            deltaEast -= movementForward.x; deltaNorth -= movementForward.y; movedHorizontally = true;
         }
         if (inputState.strafeLeft) {
-            deltaEast -= movementRight.x;
-            deltaNorth -= movementRight.y;
-            movedHorizontally = true;
+            deltaEast -= movementRight.x; deltaNorth -= movementRight.y; movedHorizontally = true;
         }
         if (inputState.strafeRight) {
-            deltaEast += movementRight.x;
-            deltaNorth += movementRight.y;
-            movedHorizontally = true;
+            deltaEast += movementRight.x; deltaNorth += movementRight.y; movedHorizontally = true;
         }
 
         if (movedHorizontally) {
@@ -461,22 +420,12 @@ function update(currentTime) {
                 playerPosition.latitude = newCartographic.latitude;
 
                 if (onSurface && buildingCollision.hit) {
-                    const newPositionCheck = {
-                        longitude: playerPosition.longitude,
-                        latitude: playerPosition.latitude,
-                        height: playerPosition.height
-                    };
+                    const newPositionCheck = { ...playerPosition }; // Shallow copy
                     const tempCache = { valid: false, hit: false, height: 0 };
                     const forcedInputState = { forward: true };
                     const newBuildingCollision = checkBuildingCollision(
-                        viewer,
-                        newPositionCheck,
-                        osmBuildingsTileset,
-                        forcedInputState,
-                        tempCache,
-                        0
+                        viewer, newPositionCheck, osmBuildingsTileset, forcedInputState, tempCache, 0
                     );
-                    
                     if (!newBuildingCollision.hit || Math.abs(newBuildingCollision.height - surfaceHeight) > 1.0) {
                         verticalVelocity = -0.1;
                     }
@@ -485,41 +434,31 @@ function update(currentTime) {
         }
     }
 
-    // --- 4. Update Tileset Visibility & Frustum Culling ---
     if (movedHorizontally || needsRender) {
         if (FrustumCuller && FrustumCuller.initialized) {
             FrustumCuller.update();
         }
     }
 
-    // --- 5. Update Camera using CameraSystem ---
     cameraSystem.update(
         playerPosition,
         playerHeading,
         forwardDirection
     );
 
-    // --- 6. Update Three.js Player Mesh Orientation and Position ---
     if (three.playerMesh) {
-        // Get camera pitch from the camera system
         const cameraPitch = cameraSystem.getPitch();
-
-        // Y-axis (yaw): Align with player heading (opposite camera)
         three.playerMesh.rotation.y = Math.PI - playerHeading;
-
-        // X-axis (pitch): Adjust based on camera pitch to keep feet down
         three.playerMesh.rotation.x = Math.PI/2 + cameraPitch;
 
-        // Normalize playerHeading to [-π, π]
         function normalizeAngle(angle) {
             return Math.atan2(Math.sin(angle), Math.cos(angle));
         }
 
-        // Apply the normalized heading to the rotation
         if(cameraPitch > 0){
-            three.playerMesh.rotation.z = -normalizeAngle(playerHeading); // Negative to align with typical coordinate systems
+            three.playerMesh.rotation.z = -normalizeAngle(playerHeading);
         } else {
-            if(playerHeading>=Math.PI){
+             if(playerHeading>=Math.PI){
                 three.playerMesh.rotation.z = -Math.PI*1.5;
             } else if(playerHeading>=0){
                 three.playerMesh.rotation.z = -Math.PI/2;
@@ -529,56 +468,48 @@ function update(currentTime) {
                 three.playerMesh.rotation.z = Math.PI;
             }
         }
-        three.playerMesh.position.set(0, 0, 0); // Keep at origin; Cesium camera handles world placement
-        
-        // Update animations based on player state
+        three.playerMesh.position.set(0, 0, 0);
+
         if (three.animationSystem) {
             three.animationSystem.updatePlayerAnimation(inputState, onSurface, verticalVelocity);
             three.animationSystem.update(deltaTime);
         }
     }
 
-    // --- 7. Update Building Color Effects ---
     if (buildingColorManager) {
-        // Only update colors when necessary (always update when enabled for animation)
         const colorSettings = buildingColorManager.getSettings();
-        
-        // Always update if enabled (since our shader has subtle animation)
         if (colorSettings.enabled) {
             buildingColorManager.update(playerPosition);
         }
     }
 
-    // --- 8. Update Mini-map ---
-    miniMap.update(playerPosition, playerHeading);
+    // Check if miniMap exists before updating (added conditional check)
+    if (typeof miniMap !== 'undefined' && miniMap && typeof miniMap.update === 'function') {
+        miniMap.update(playerPosition, playerHeading);
+    }
 
-    // --- Render Logic ---
 
-    //Render Cesium scene
     viewer.scene.globe.show = true;
     if (!buildingColorManager || !buildingColorManager.getSettings().enabled) {
         viewer.scene.backgroundColor = new Cesium.Color(0.678, 0.847, 0.902, 1);
     }
     viewer.render();
 
-    // Render Three.js main scene (player, etc.) on top
     if (three.renderer && three.scene && three.camera) {
         three.renderer.render(three.scene, three.camera);
     }
 
-    // --- 10. Update Instructions Display ---
     const heightInfo = ` (Altitude: ${playerPosition.height.toFixed(1)}m)`;
     const buildingInfo = buildingCollision.hit ? ` | Building: ${buildingCollision.height.toFixed(1)}m` : "";
-    
-    // Custom instructions during dramatic fall
+
     if (fallStateRef.isInInitialFall) {
         instructionsElement.innerHTML = `Entering city... Brace for impact!${heightInfo}`;
     } else {
+        // Use getDirection imported from initial-setup.js
         instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump | E: Effects<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
     }
 }
 
-// --- Window Resize Handling ---
 window.addEventListener('resize', () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
