@@ -241,8 +241,8 @@ function setupColorControls(colorManager) {
         controlsDiv.id = 'colorControls';
         controlsDiv.className = 'shader-controls';
         controlsDiv.innerHTML = `
-            <button id="toggleShader" class="shader-button">Enable Effects (E)</button>
-            <div id="shaderInfo" class="shader-info">Effect: None</div>
+            <button id="toggleShader" class="shader-button">Enable Futuristic Mode (E)</button>
+            <div id="shaderInfo" class="shader-info">City Mode: Normal</div>
         `;
         
         // Add styles
@@ -275,7 +275,7 @@ function setupColorControls(colorManager) {
             }
             
             .shader-button.active {
-                background-color: rgba(0, 120, 210, 0.8);
+                background-color: rgba(80, 150, 255, 0.8);
                 border-color: #fff;
             }
             
@@ -307,55 +307,28 @@ function setupColorControls(colorManager) {
         const settings = colorManager.getSettings();
         
         if (settings.enabled) {
-            toggleButton.textContent = `Cycle Effects (E)`;
+            toggleButton.textContent = `Disable Futuristic Mode (E)`;
             toggleButton.classList.add('active');
-            colorInfo.textContent = `Effect: ${settings.effectType.charAt(0).toUpperCase() + settings.effectType.slice(1)}`;
+            colorInfo.textContent = `City Mode: Futuristic`;
         } else {
-            toggleButton.textContent = `Enable Effects (E)`;
+            toggleButton.textContent = `Enable Futuristic Mode (E)`;
             toggleButton.classList.remove('active');
-            colorInfo.textContent = `Effect: None`;
+            colorInfo.textContent = `City Mode: Normal`;
         }
     }
     
     // Button click handler
     toggleButton.addEventListener('click', () => {
-        const settings = colorManager.getSettings();
-        
-        if (settings.enabled) {
-            // If already enabled, cycle to next effect
-            colorManager.cycleEffect();
-        } else {
-            // If disabled, enable with default effect
-            colorManager.enable('neon');
-        }
-        
+        colorManager.toggle();
         updateButtonState();
     });
     
     // Add keyboard shortcut (E key)
     document.addEventListener('keydown', (event) => {
         if (event.key.toUpperCase() === 'E') {
-            const settings = colorManager.getSettings();
-            
-            if (settings.enabled) {
-                // If already enabled, cycle to next effect
-                colorManager.cycleEffect();
-            } else {
-                // If disabled, enable with default effect
-                colorManager.enable('neon');
-            }
-            
+            colorManager.toggle();
             updateButtonState();
             event.preventDefault();
-        }
-        
-        // Add Escape key to disable effects
-        if (event.key === 'Escape') {
-            if (colorManager.getSettings().enabled) {
-                colorManager.disable();
-                updateButtonState();
-                event.preventDefault();
-            }
         }
     });
     
@@ -618,15 +591,11 @@ function update(currentTime) {
 
     // --- 7. Update Building Color Effects ---
     if (buildingColorManager) {
-        // Only update colors when necessary (on movement or for animated effects)
+        // Only update colors when necessary (always update when enabled for animation)
         const colorSettings = buildingColorManager.getSettings();
-        const animatedEffects = ['pulse', 'scanwave'];
-        const needsColorUpdate = 
-            (colorSettings.enabled && 
-             (movedHorizontally || verticalVelocity !== 0 || 
-              animatedEffects.includes(colorSettings.effectType)));
         
-        if (needsColorUpdate) {
+        // Always update if enabled (since our shader has subtle animation)
+        if (colorSettings.enabled) {
             buildingColorManager.update(playerPosition);
         }
     }

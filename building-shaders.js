@@ -1,75 +1,38 @@
 /**
- * Applies a proximity-based color effect to buildings
- * Buildings closer to the player will have a different appearance
+ * Applies a futuristic neon effect to buildings in the scene
  * 
  * @param {Object} viewer - Cesium viewer instance
  * @param {Object} osmBuildingsTileset - OSM Buildings tileset
  * @param {Object} playerPosition - Player position in Cartographic coordinates
  * @param {number} effectRadius - Radius within which buildings are affected (default: 100.0)
- * @param {string} effectType - Type of effect to apply ('neon', 'hologram', 'highlight', 'pulse')
  */
-export function applyProximityEffect(viewer, osmBuildingsTileset, playerPosition, effectRadius = 100.0, effectType = 'neon') {
+export function applyFuturisticEffect(viewer, osmBuildingsTileset, playerPosition, effectRadius = 100.0) {
     if (!viewer || !osmBuildingsTileset || !playerPosition) {
         console.warn("Missing required objects for building effect");
         return;
     }
 
-    // Get current time for animation effects
+    // Get current time for subtle pulsing animation
     const time = Date.now() / 1000;
+    const pulseIntensity = Math.sin(time * 0.5) * 0.1 + 0.9; // Subtle pulse between 0.8 and 1.0
     
-    // Create style based on effect type
-    let styleExpression;
-    
-    switch (effectType) {
-        case 'neon':
-            // Neon effect - blue/purple buildings
-            styleExpression = 
-                `${playerPosition.longitude < 0 ? '' : '+'}${playerPosition.longitude} * ${playerPosition.latitude < 0 ? '' : '+'}${playerPosition.latitude} * ${effectRadius} === 0 ? color('rgba(0, 150, 255, 0.8)') : color('rgba(230, 230, 255, 0.9)')`;
-            break;
-            
-        case 'hologram':
-            // Hologram effect - transparent blue
-            styleExpression = 
-                `${playerPosition.longitude < 0 ? '' : '+'}${playerPosition.longitude} * ${playerPosition.latitude < 0 ? '' : '+'}${playerPosition.latitude} * ${effectRadius} === 0 ? color('rgba(0, 210, 255, 0.6)') : color('rgba(230, 230, 255, 0.9)')`;
-            break;
-            
-        case 'highlight':
-            // Highlight effect - golden/orange color
-            styleExpression = 
-                `${playerPosition.longitude < 0 ? '' : '+'}${playerPosition.longitude} * ${playerPosition.latitude < 0 ? '' : '+'}${playerPosition.latitude} * ${effectRadius} === 0 ? color('rgba(255, 200, 50, 0.9)') : color('rgba(230, 230, 255, 0.9)')`;
-            break;
-            
-        case 'pulse':
-            // Pulse effect - buildings pulse based on time
-            const pulseIntensity = Math.floor((Math.sin(time * 2) * 0.5 + 0.5) * 255);
-            styleExpression = 
-                `${playerPosition.longitude < 0 ? '' : '+'}${playerPosition.longitude} * ${playerPosition.latitude < 0 ? '' : '+'}${playerPosition.latitude} * ${effectRadius} === 0 ? color('rgba(${pulseIntensity}, 100, 255, 0.9)') : color('rgba(230, 230, 255, 0.9)')`;
-            break;
-            
-        case 'scanwave':
-            // Scan wave effect (simpler version)
-            const waveIntensity = Math.floor((Math.sin(time * 4) * 0.5 + 0.5) * 255);
-            styleExpression = 
-                `${playerPosition.longitude < 0 ? '' : '+'}${playerPosition.longitude} * ${playerPosition.latitude < 0 ? '' : '+'}${playerPosition.latitude} * ${effectRadius} === 0 ? color('rgba(50, ${waveIntensity}, 255, 0.9)') : color('rgba(230, 230, 255, 0.9)')`;
-            break;
-            
-        default:
-            // Default effect (subtle blue tint)
-            styleExpression = `color('rgba(230, 230, 255, 0.9)')`;
-    }
-
-    // Apply the style to the tileset with error handling
+    // Create a vibrant futuristic style
+    // Use a mix of glowing pastel neon colors
     try {
         osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({
-            color: styleExpression
+            color: `mix(
+                        color('rgba(80, 200, 255, 0.75)'), 
+                        color('rgba(180, 100, 255, 0.75)'), 
+                        sin((${time} + (${playerPosition.longitude} + ${playerPosition.latitude}) * 100.0) * 0.3) * 0.5 + 0.5
+                    ) * ${pulseIntensity}`
         });
     } catch (error) {
-        console.error("Error applying style to buildings:", error);
+        console.error("Error applying futuristic style to buildings:", error);
         
         // Fall back to a simple color style if the shader fails
         try {
             osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({
-                color: "color('rgb(100, 150, 255)')"
+                color: "color('rgba(120, 180, 255, 0.7)')"
             });
         } catch (fallbackError) {
             console.error("Even fallback style failed:", fallbackError);
@@ -78,21 +41,17 @@ export function applyProximityEffect(viewer, osmBuildingsTileset, playerPosition
 }
 
 /**
- * Creates a building color manager to handle dynamic building effects
+ * Creates a building color manager to handle the futuristic building effect
  * 
  * @param {Object} viewer - Cesium viewer instance
  * @param {Object} osmBuildingsTileset - OSM Buildings tileset
- * @returns {Object} Color manager object with methods to control effects
+ * @returns {Object} Color manager object with methods to control effect
  */
 export function createBuildingColorManager(viewer, osmBuildingsTileset) {
-    let currentEffect = 'none';
-    let effectRadius = 100.0;
     let isEnabled = false;
+    let effectRadius = 100.0;
     let lastUpdateTime = 0;
     const updateInterval = 250; // Update every 250ms for performance
-    
-    // Available effect types
-    const effectTypes = ['neon', 'hologram', 'highlight', 'pulse', 'scanwave'];
     
     // Store original tileset style
     let originalStyle = null;
@@ -123,22 +82,15 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
     
     const manager = {
         /**
-         * Enable color effects
-         * @param {string} effectType - Type of effect to apply (optional)
+         * Enable futuristic effect
          */
-        enable: function(effectType = 'neon') {
-            if (effectTypes.includes(effectType)) {
-                currentEffect = effectType;
-            } else {
-                currentEffect = 'neon'; // Default to neon if invalid type
-                console.warn(`Invalid effect type: ${effectType}. Using 'neon' instead.`);
-            }
+        enable: function() {
             isEnabled = true;
-            console.log(`Building color effect enabled: ${currentEffect}`);
+            console.log("Futuristic building effect enabled");
         },
         
         /**
-         * Disable color effects and restore original appearance
+         * Disable effect and restore original appearance
          */
         disable: function() {
             isEnabled = false;
@@ -168,21 +120,16 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
         },
         
         /**
-         * Cycle to the next effect type
-         * @returns {string} New effect name
+         * Toggle effect on/off
+         * @returns {boolean} New state (true = enabled, false = disabled)
          */
-        cycleEffect: function() {
-            const currentIndex = effectTypes.indexOf(currentEffect);
-            const nextIndex = (currentIndex + 1) % effectTypes.length;
-            currentEffect = effectTypes[nextIndex];
-            
+        toggle: function() {
             if (isEnabled) {
-                console.log(`Switched to ${currentEffect} effect`);
-                // Force immediate update
-                lastUpdateTime = 0;
+                this.disable();
+            } else {
+                this.enable();
             }
-            
-            return currentEffect;
+            return isEnabled;
         },
         
         /**
@@ -197,7 +144,7 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
             // Only update at specified interval to maintain performance
             if (currentTime - lastUpdateTime < updateInterval) return;
             
-            applyProximityEffect(viewer, osmBuildingsTileset, playerPosition, effectRadius, currentEffect);
+            applyFuturisticEffect(viewer, osmBuildingsTileset, playerPosition, effectRadius);
             lastUpdateTime = currentTime;
         },
         
@@ -208,7 +155,6 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
         getSettings: function() {
             return {
                 enabled: isEnabled,
-                effectType: currentEffect,
                 radius: effectRadius
             };
         }
