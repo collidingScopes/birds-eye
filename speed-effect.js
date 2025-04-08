@@ -160,7 +160,7 @@ export class ShaderSpeedEffect {
                             // Create wind stream position 
                             vec2 pos = center + offset;
                             
-                            // Animation - move toward center over time - INCREASED SPEED
+                            // Animation - move away from center over time - INCREASED SPEED
                             float t = fract(time * (0.1 + speed * 0.6) + hash(vec2(float(i), 56.78))); // Increased from 0.4 to 0.6
                                                         
                             // Stream length depends on distance and intensity
@@ -184,7 +184,7 @@ export class ShaderSpeedEffect {
                         }
                         
                         // Add radial glow near center - INCREASED GLOW
-                        float glow = smoothstep(0.6, 0.0, distToCenter) * 0.08 * intensity; // Increased from 0.15 to 0.25
+                        float glow = smoothstep(0.4, 0.0, distToCenter) * 0.08 * intensity; // Increased from 0.15 to 0.25
                         
                         // Final color with wind streams and glow - INCREASED MAX OPACITY
                         color = vec4(1.0, 1.0, 1.0, min(1.0, windAccum + glow) * intensity); // Increased from 0.8 to 1.0

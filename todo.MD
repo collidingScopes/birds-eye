@@ -49,5 +49,3 @@ Different challenges in each city
 Add billboards or spotlights in cities showing key attractions
 
 Night mode
-
-Sound effect / animation effect with the panda jumps (booster effect / blast-off)
