@@ -30,9 +30,11 @@ html, body {
     cursor: pointer;
 }
 #fpsCounter {
-    position: absolute; bottom: 10px; right: 10px;
+    position: absolute; bottom: 5px; right: 5px;
     background: rgba(40, 40, 40, 0.8); color: white;
-    padding: 5px 10px; border-radius: 5px; font-size: 14px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 13px;
     z-index: 10; pointer-events: none;
 }
 
@@ -96,8 +98,8 @@ html, body {
 
 .shader-controls {
     position: absolute;
-    bottom: 10px;
-    right: 10px;
+    bottom: 30px;
+    right: 5px;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -105,11 +107,11 @@ html, body {
 }
 
 .shader-button {
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.6);
     color: #fff;
     border: 1px solid #aaa;
     border-radius: 4px;
-    padding: 8px 12px;
+    padding: 6px;
     margin-bottom: 5px;
     cursor: pointer;
     font-family: 'Arial', sans-serif;
@@ -121,15 +123,6 @@ html, body {
 }
 
 .shader-button.active {
-    background-color: rgba(0, 120, 210, 0.8);
+    background-color: rgba(70, 246, 255, 0.8);
     border-color: #fff;
-}
-
-.shader-info {
-    background-color: rgba(0, 0, 0, 0.6);
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-family: 'Arial', sans-serif;
-    font-size: 12px;
 }

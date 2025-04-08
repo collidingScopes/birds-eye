@@ -61,3 +61,5 @@ Add billboards or spotlights in cities showing key attractions
 Night mode
 
 Toggle building opacity / color
+
+Sound effect / animation effect with the panda jumps (booster effect / blast-off)

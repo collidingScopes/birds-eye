@@ -231,7 +231,6 @@ async function initialize() {
  */
 function setupColorControls(colorManager) {
     let toggleButton = document.getElementById('toggleShader');
-    let colorInfo = document.getElementById('shaderInfo');
     
     if (!toggleButton || !colorInfo) {
         console.warn("Color UI elements not found");
@@ -242,61 +241,13 @@ function setupColorControls(colorManager) {
         controlsDiv.className = 'shader-controls';
         controlsDiv.innerHTML = `
             <button id="toggleShader" class="shader-button">Enable Futuristic Mode (E)</button>
-            <div id="shaderInfo" class="shader-info">City Mode: Normal</div>
         `;
-        
-        // Add styles
-        const styleElement = document.createElement('style');
-        styleElement.textContent = `
-            .shader-controls {
-                position: absolute;
-                bottom: 10px;
-                right: 10px;
-                display: flex;
-                flex-direction: column;
-                align-items: flex-end;
-                z-index: 100;
-            }
-            
-            .shader-button {
-                background-color: rgba(0, 0, 0, 0.7);
-                color: #fff;
-                border: 1px solid #aaa;
-                border-radius: 4px;
-                padding: 8px 12px;
-                margin-bottom: 5px;
-                cursor: pointer;
-                font-family: 'Arial', sans-serif;
-                transition: background-color 0.2s;
-            }
-            
-            .shader-button:hover {
-                background-color: rgba(40, 40, 40, 0.8);
-            }
-            
-            .shader-button.active {
-                background-color: rgba(80, 150, 255, 0.8);
-                border-color: #fff;
-            }
-            
-            .shader-info {
-                background-color: rgba(0, 0, 0, 0.6);
-                color: #fff;
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-family: 'Arial', sans-serif;
-                font-size: 12px;
-            }
-        `;
-        
-        document.head.appendChild(styleElement);
         document.body.appendChild(controlsDiv);
         
         // Try again with newly created elements
         toggleButton = document.getElementById('toggleShader');
-        colorInfo = document.getElementById('shaderInfo');
         
-        if (!toggleButton || !colorInfo) {
+        if (!toggleButton) {
             console.error("Failed to create color UI elements");
             return;
         }
@@ -309,11 +260,9 @@ function setupColorControls(colorManager) {
         if (settings.enabled) {
             toggleButton.textContent = `Disable Futuristic Mode (E)`;
             toggleButton.classList.add('active');
-            colorInfo.textContent = `City Mode: Futuristic`;
         } else {
             toggleButton.textContent = `Enable Futuristic Mode (E)`;
             toggleButton.classList.remove('active');
-            colorInfo.textContent = `City Mode: Normal`;
         }
     }
     

@@ -14,7 +14,6 @@ export function applyFuturisticEffect(viewer, osmBuildingsTileset, playerPositio
 
     // Get current time for subtle pulsing animation
     const time = Date.now() / 1000;
-    const pulseIntensity = Math.sin(time * 0.5) * 0.1 + 0.9; // Subtle pulse between 0.8 and 1.0
     
     // Change sky color to pastel pink
     viewer.scene.backgroundColor = new Cesium.Color(0.98, 0.76, 0.84, 1.0);
@@ -24,10 +23,10 @@ export function applyFuturisticEffect(viewer, osmBuildingsTileset, playerPositio
     try {
         osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({
             color: `mix(
-                        color('rgba(80, 200, 255, 0.75)'), 
-                        color('rgba(180, 100, 255, 0.75)'), 
-                        sin((${time} + (${playerPosition.longitude} + ${playerPosition.latitude}) * 100.0) * 0.3) * 0.5 + 0.5
-                    ) * ${pulseIntensity}`
+                        color('rgba(36, 255, 186, 0.96)'), 
+                        color('rgba(255, 100, 221, 0.96)'), 
+                        sin((${time}*0.2 + (${playerPosition.longitude} + ${playerPosition.latitude}) * 100.0) * 0.3) * 0.5 + 0.5
+                    )`
         });
     } catch (error) {
         console.error("Error applying futuristic style to buildings:", error);
@@ -35,7 +34,7 @@ export function applyFuturisticEffect(viewer, osmBuildingsTileset, playerPositio
         // Fall back to a simple color style if the shader fails
         try {
             osmBuildingsTileset.style = new Cesium.Cesium3DTileStyle({
-                color: "color('rgba(120, 180, 255, 0.7)')"
+                color: "color('rgba(120, 180, 255, 0.96)')"
             });
         } catch (fallbackError) {
             console.error("Even fallback style failed:", fallbackError);
@@ -121,9 +120,8 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
                     height: 100%;
                     pointer-events: none;
                     z-index: 1000;
-                    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-                    background-size: 100% 2px, 3px 100%;
-                    animation: flicker 0.15s infinite;
+                    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
+                    background-size: 100% 4px, 4px 100%;
                 }
                 
                 #crt-overlay::before {
@@ -133,8 +131,8 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: rgba(18, 16, 16, 0.1);
-                    opacity: 0.1;
+                    background: rgba(18, 16, 16, 0.05);
+                    opacity: 0.05;
                     z-index: 1000;
                     pointer-events: none;
                 }
@@ -146,33 +144,9 @@ export function createBuildingColorManager(viewer, osmBuildingsTileset) {
                     left: 0;
                     width: 100%;
                     height: 100%;
-                    background: repeating-linear-gradient(transparent, transparent 50%, rgba(0, 0, 0, 0.04) 50%, rgba(0, 0, 0, 0.04) 100%);
-                    background-size: 100% 10px;
+                    background: repeating-linear-gradient(transparent, transparent 50%, rgba(0, 0, 0, 0.025) 50%, rgba(0, 0, 0, 0.025) 100%);
+                    background-size: 100% 80px;
                     pointer-events: none;
-                }
-                
-                @keyframes flicker {
-                    0% { opacity: 0.97; }
-                    5% { opacity: 0.95; }
-                    10% { opacity: 0.94; }
-                    15% { opacity: 0.98; }
-                    20% { opacity: 0.9; }
-                    25% { opacity: 0.95; }
-                    30% { opacity: 0.98; }
-                    35% { opacity: 0.96; }
-                    40% { opacity: 0.95; }
-                    45% { opacity: 0.98; }
-                    50% { opacity: 0.99; }
-                    55% { opacity: 0.96; }
-                    60% { opacity: 0.97; }
-                    65% { opacity: 0.98; }
-                    70% { opacity: 0.97; }
-                    75% { opacity: 0.99; }
-                    80% { opacity: 0.98; }
-                    85% { opacity: 0.96; }
-                    90% { opacity: 0.97; }
-                    95% { opacity: 0.95; }
-                    100% { opacity: 0.95; }
                 }
             `;
             
