@@ -93,3 +93,43 @@ html, body {
 #minimapToggle:hover {
     background: rgba(40, 40, 40, 0.8);
 }
+
+.shader-controls {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    z-index: 100;
+}
+
+.shader-button {
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    font-family: 'Arial', sans-serif;
+    transition: background-color 0.2s;
+}
+
+.shader-button:hover {
+    background-color: rgba(40, 40, 40, 0.8);
+}
+
+.shader-button.active {
+    background-color: rgba(0, 120, 210, 0.8);
+    border-color: #fff;
+}
+
+.shader-info {
+    background-color: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'Arial', sans-serif;
+    font-size: 12px;
+}

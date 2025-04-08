@@ -17,6 +17,7 @@ import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
 import { AnimationSystem } from './animation-system.js';
 import { TerrainManager } from './terrain-manager.js';
+import { createBuildingColorManager } from './building-shaders.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -81,6 +82,9 @@ let currentFps = 0;
 
 // Three.js and Cesium objects
 let viewer, cesiumCamera, three, osmBuildingsTileset, FrustumCuller, miniMap, cameraSystem;
+
+// Building color manager
+let buildingColorManager = null;
 
 // --- Game Loop Variables ---
 let lastTime = 0;
@@ -158,7 +162,27 @@ async function initialize() {
     playerHeading = playerHeadingRef.value;
         
     try {
+        // Load OSM buildings tileset
         osmBuildingsTileset = await loadOsmBuildings(viewer, instructionsElement);
+        
+        // Initialize building color manager with error handling
+        try {
+            buildingColorManager = createBuildingColorManager(viewer, osmBuildingsTileset);
+            console.log("Building color manager initialized");
+            
+            // Setup color controls
+            setupColorControls(buildingColorManager);
+        } catch (colorError) {
+            console.warn("Failed to initialize building color manager:", colorError);
+            console.log("Game will continue without color effects");
+            
+            // Hide color controls if they exist
+            const colorControls = document.getElementById('colorControls');
+            if (colorControls) {
+                colorControls.style.display = 'none';
+            }
+        }
+        
         console.log("Initial setup complete. Starting update loop.");
         
         // Verify player height is set properly
@@ -181,6 +205,144 @@ async function initialize() {
         instructionsElement.innerHTML = "Failed to initialize. Check console for errors.";
         instructionsElement.style.color = 'red';
     }
+}
+
+/**
+ * Set up controls for building color effects
+ * @param {Object} colorManager - Building color manager instance
+ */
+function setupColorControls(colorManager) {
+    let toggleButton = document.getElementById('toggleShader');
+    let colorInfo = document.getElementById('shaderInfo');
+    
+    if (!toggleButton || !colorInfo) {
+        console.warn("Color UI elements not found");
+        
+        // Create UI elements if they don't exist
+        const controlsDiv = document.createElement('div');
+        controlsDiv.id = 'colorControls';
+        controlsDiv.className = 'shader-controls';
+        controlsDiv.innerHTML = `
+            <button id="toggleShader" class="shader-button">Enable Effects (E)</button>
+            <div id="shaderInfo" class="shader-info">Effect: None</div>
+        `;
+        
+        // Add styles
+        const styleElement = document.createElement('style');
+        styleElement.textContent = `
+            .shader-controls {
+                position: absolute;
+                bottom: 10px;
+                right: 10px;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-end;
+                z-index: 100;
+            }
+            
+            .shader-button {
+                background-color: rgba(0, 0, 0, 0.7);
+                color: #fff;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 8px 12px;
+                margin-bottom: 5px;
+                cursor: pointer;
+                font-family: 'Arial', sans-serif;
+                transition: background-color 0.2s;
+            }
+            
+            .shader-button:hover {
+                background-color: rgba(40, 40, 40, 0.8);
+            }
+            
+            .shader-button.active {
+                background-color: rgba(0, 120, 210, 0.8);
+                border-color: #fff;
+            }
+            
+            .shader-info {
+                background-color: rgba(0, 0, 0, 0.6);
+                color: #fff;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-family: 'Arial', sans-serif;
+                font-size: 12px;
+            }
+        `;
+        
+        document.head.appendChild(styleElement);
+        document.body.appendChild(controlsDiv);
+        
+        // Try again with newly created elements
+        toggleButton = document.getElementById('toggleShader');
+        colorInfo = document.getElementById('shaderInfo');
+        
+        if (!toggleButton || !colorInfo) {
+            console.error("Failed to create color UI elements");
+            return;
+        }
+    }
+    
+    // Update button text and style based on current state
+    function updateButtonState() {
+        const settings = colorManager.getSettings();
+        
+        if (settings.enabled) {
+            toggleButton.textContent = `Cycle Effects (E)`;
+            toggleButton.classList.add('active');
+            colorInfo.textContent = `Effect: ${settings.effectType.charAt(0).toUpperCase() + settings.effectType.slice(1)}`;
+        } else {
+            toggleButton.textContent = `Enable Effects (E)`;
+            toggleButton.classList.remove('active');
+            colorInfo.textContent = `Effect: None`;
+        }
+    }
+    
+    // Button click handler
+    toggleButton.addEventListener('click', () => {
+        const settings = colorManager.getSettings();
+        
+        if (settings.enabled) {
+            // If already enabled, cycle to next effect
+            colorManager.cycleEffect();
+        } else {
+            // If disabled, enable with default effect
+            colorManager.enable('neon');
+        }
+        
+        updateButtonState();
+    });
+    
+    // Add keyboard shortcut (E key)
+    document.addEventListener('keydown', (event) => {
+        if (event.key.toUpperCase() === 'E') {
+            const settings = colorManager.getSettings();
+            
+            if (settings.enabled) {
+                // If already enabled, cycle to next effect
+                colorManager.cycleEffect();
+            } else {
+                // If disabled, enable with default effect
+                colorManager.enable('neon');
+            }
+            
+            updateButtonState();
+            event.preventDefault();
+        }
+        
+        // Add Escape key to disable effects
+        if (event.key === 'Escape') {
+            if (colorManager.getSettings().enabled) {
+                colorManager.disable();
+                updateButtonState();
+                event.preventDefault();
+            }
+        }
+    });
+    
+    // Initialize button state
+    updateButtonState();
 }
 
 /**
@@ -435,6 +597,21 @@ function update(currentTime) {
         }
     }
 
+    // --- 7. Update Building Color Effects ---
+    if (buildingColorManager) {
+        // Only update colors when necessary (on movement or for animated effects)
+        const colorSettings = buildingColorManager.getSettings();
+        const animatedEffects = ['pulse', 'scanwave'];
+        const needsColorUpdate = 
+            (colorSettings.enabled && 
+             (movedHorizontally || verticalVelocity !== 0 || 
+              animatedEffects.includes(colorSettings.effectType)));
+        
+        if (needsColorUpdate) {
+            buildingColorManager.update(playerPosition);
+        }
+    }
+
     // --- 8. Update Mini-map ---
     miniMap.update(playerPosition, playerHeading);
 
@@ -458,7 +635,7 @@ function update(currentTime) {
     if (fallStateRef.isInInitialFall) {
         instructionsElement.innerHTML = `Entering city... Brace for impact!${heightInfo}`;
     } else {
-        instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
+        instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump | E: Effects<br>Facing: ${getDirection(playerHeading)}${heightInfo}${buildingInfo}`;
     }
 }
 
