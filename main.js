@@ -20,6 +20,7 @@ import { createBuildingColorManager } from './building-shaders.js';
 // Import the new location options module
 import { setupLocationOptions } from './location-options.js';
 import { JumpBoostEffect } from './jump-boost-animation.js';
+import { ShaderSpeedEffect } from './speed-effect.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -49,7 +50,9 @@ let currentSpeedFactor = 0.0;
 // How quickly player accelerates (units per second)
 const accelerationRate = 1.0;
 // How quickly player decelerates when not moving (units per second)
-const decelerationRate = 1.0;
+const decelerationRate = 3.0;
+let speedEffect = null;
+const SPEED_EFFECT_THRESHOLD = 0.7; // Speed threshold to start showing the effect
 let jumpBoostEffect = null;
 
 // Input state tracking
@@ -222,6 +225,8 @@ async function initialize() {
     // Initialize jump boost effect
     jumpBoostEffect = new JumpBoostEffect(three.scene);
     console.log("Jump boost effect initialized");
+
+    speedEffect = new ShaderSpeedEffect(document.body, three.THREE);
 }
 
 /**
@@ -393,19 +398,29 @@ function update(currentTime) {
 
     // Calculate acceleration/deceleration
     if (isMoving) {
-        // Accelerate when moving
-        currentSpeedFactor = Math.min(currentSpeedFactor + accelerationRate * deltaTime, 1.0);
+        // Accelerate when moving, using a non-linear curve for more realistic acceleration
+        const accelerationCurve = 1.0 - currentSpeedFactor; // Slows acceleration as speed increases
+        currentSpeedFactor = Math.min(
+            currentSpeedFactor + (accelerationRate * accelerationCurve * deltaTime),
+            1.0
+        );
     } else {
         // Decelerate when not moving
         currentSpeedFactor = Math.max(currentSpeedFactor - decelerationRate * deltaTime, 0.0);
     }
-
+    
     // Apply surface factor if on ground
-    const surfaceSpeedFactor = 0.5; // Adjust as needed (0.5 = half speed)
+    const surfaceSpeedFactor = 0.4; // Adjust as needed (0.5 = half speed)
     const environmentFactor = onSurface ? surfaceSpeedFactor : 1.0;
-
+    
     // Calculate final move amount with both acceleration and environment factors
     const moveAmount = playerMoveSpeed * deltaTime * currentSpeedFactor * environmentFactor;
+    
+    // --- Add this after updating the speed calculations ---
+    if (speedEffect) {
+        // Pass the camera system to update wind tunnel direction based on view
+        speedEffect.update(currentSpeedFactor, SPEED_EFFECT_THRESHOLD, cameraSystem, !onSurface);
+    }
 
     let deltaEast = 0;
     let deltaNorth = 0;
@@ -579,6 +594,10 @@ window.addEventListener('resize', () => {
         if (typeof cesiumCamera.frustum.aspectRatio !== 'undefined') {
             cesiumCamera.frustum.aspectRatio = width / height;
         }
+    }
+
+    if (speedEffect) {
+        speedEffect.handleResize();
     }
 
     needsRender = true;

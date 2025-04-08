@@ -3,7 +3,7 @@ import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/j
 import { AnimationSystem } from './animation-system.js';
 
 // --- Constants previously in helper-functions.js ---
-export const playerMoveSpeed = 80.0;
+export const playerMoveSpeed = 100.0;
 export const cameraTurnSpeed = 1.3;
 export const jumpVelocity = 50;
 export const gravity = -50.0;
@@ -293,13 +293,19 @@ const enableLOD = true;
  * @returns {Object} Three.js objects and animation system
  */
 export async function initThree() {
+    // Import THREE directly to have a reference to the library itself
+    const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js');
+    const { FBXLoader } = await import('https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/loaders/FBXLoader.js');
+    
     const three = {
         scene: null,
         camera: null,
         renderer: null,
         playerMesh: null,
         animationSystem: null,
-        clock: new THREE.Clock()
+        clock: new THREE.Clock(),
+        // Add a reference to the THREE library itself
+        THREE: THREE
     };
 
     const scene = new THREE.Scene();

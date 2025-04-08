@@ -178,7 +178,7 @@ export class JumpBoostEffect {
             ring.mesh.material.uniforms.progress.value = progress;
             
             // Scale the ring as it expands
-            const scale = 0.1 + progress * 2.0; // Grow from 0.1 to 5.1
+            const scale = 0.1 + progress * 2.0; // Grow from 0.1 to 2.1
             ring.mesh.scale.set(scale, scale, scale);
             
             // Position the ring at player's horizontal position, keeping the original y
