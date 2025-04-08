@@ -44,3 +44,14 @@ Make the dramatic initial fall happen whenever you teleport to a new city
 Add city chooser at the start menu?
 
 Stand up straight when teleporting to new city
+
+Different challenges in each city
+- For example, eat dim sum in hong kong
+- Fight enemies in New York
+- find treasure in Cairo
+- Race in Bangkok (need to get speed powerups)
+- Need to get jetpack or flying ability in other city
+- drink wine in Paris
+- etc....
+- instruciton popups or menu
+- 
