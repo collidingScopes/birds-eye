@@ -359,7 +359,7 @@ function update(currentTime) {
 
             // ADD THIS CODE:
             // Trigger jump boost effect
-            if (jumpBoostEffect && onSurface) {
+            if (jumpBoostEffect) {
                 // Get player position in Three.js coordinates
                 let threePosition = null;
                 

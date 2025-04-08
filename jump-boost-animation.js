@@ -7,10 +7,10 @@ export class JumpBoostEffect {
     constructor(scene) {
         this.scene = scene;
         this.rings = [];
-        this.maxRings = 3;
+        this.maxRings = 4;
         this.active = false;
         this.lastJumpTime = 0;
-        this.effectDuration = 1.0; // seconds
+        this.effectDuration = 0.4; // seconds
 
         // Create shader material for rings
         this.ringMaterial = new THREE.ShaderMaterial({
@@ -74,7 +74,7 @@ export class JumpBoostEffect {
     initRings() {
         for (let i = 0; i < this.maxRings; i++) {
             // Create a circular plane for each ring
-            const geometry = new THREE.CircleGeometry(1, 32);
+            const geometry = new THREE.CircleGeometry(1, 8);
             const material = this.ringMaterial.clone();
             
             // Each ring gets its own uniform instances
@@ -93,7 +93,7 @@ export class JumpBoostEffect {
                 mesh: ring,
                 active: false,
                 startTime: 0,
-                delay: i * 0.15 // Staggered activation
+                delay: i * 0.05 // Staggered activation
             });
         }
     }
@@ -178,7 +178,7 @@ export class JumpBoostEffect {
             ring.mesh.material.uniforms.progress.value = progress;
             
             // Scale the ring as it expands
-            const scale = 0.1 + progress * 5.0; // Grow from 0.1 to 5.1
+            const scale = 0.1 + progress * 2.0; // Grow from 0.1 to 5.1
             ring.mesh.scale.set(scale, scale, scale);
             
             // Position the ring at player's horizontal position, keeping the original y
