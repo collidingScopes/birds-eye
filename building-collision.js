@@ -212,6 +212,13 @@ export function checkBuildingCollision(
             // Convert to cartographic to get height
             const intersectionCartographic = Cesium.Cartographic.fromCartesian(position);
             
+            // FIX: Validate building height - Skip negative heights or those too close to zero
+            // This is the key fix that prevents negative building heights from being used
+            if (intersectionCartographic.height <= 0) {
+                console.warn(`Ignoring invalid building height: ${intersectionCartographic.height}m`);
+                continue;
+            }
+            
             // Ensure we're below the player (within reason)
             const isBelow = intersectionCartographic.height < rayStartHeight - 0.5;
             
@@ -247,6 +254,12 @@ export function checkBuildingCollision(
             // Get the closest rooftop
             const closestRooftop = rooftops[0];
             
+            // FIX: Additional validation to ensure we're not using a negative or invalid height
+            if (closestRooftop.height <= 0) {
+                console.warn(`Final rooftop has invalid height: ${closestRooftop.height}m. Using 0 instead.`);
+                closestRooftop.height = 0;
+            }
+            
             // Store the results in the cache
             cache.valid = true;
             cache.hit = true;
@@ -262,6 +275,12 @@ export function checkBuildingCollision(
             result.hit = true;
             result.height = closestRooftop.height;
             result.rooftopData = cache.rooftopData;
+            
+            // FIX: Log if we had to filter out negative heights
+            if (intersections.length > rooftops.length) {
+                console.debug(`Filtered ${intersections.length - rooftops.length} invalid building heights`);
+            }
+            
             return result;
         }
     } catch (error) {
