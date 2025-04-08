@@ -9,7 +9,8 @@
  * @param {Object} cache - Object to store cached building height and position
  * @param {number} heightThreshold - Minimum height to check for collisions (default: 20.0)
  * @param {number} maxDistance - Maximum distance for ray cast (default: 150.0)
- * @param {number} minMovementDistance - Minimum distance the player must move horizontally to trigger a new check (default: 20.0)
+ * @param {number} minMovementDistance - Minimum distance the player must move horizontally to trigger a new check (default: 15.0)
+ * @param {number} minVerticalDistance - Minimum vertical distance change to trigger a new check (default: 15.0)
  * @returns {Object} Object with properties: { hit: boolean, height: number }
  */
 export function checkBuildingCollision(
@@ -19,8 +20,9 @@ export function checkBuildingCollision(
     inputState, 
     cache = {}, 
     heightThreshold = 20.0, 
-    maxDistance = 100.0,
+    maxDistance = 150.0,
     minMovementDistance = 15.0,
+    minVerticalDistance = 15.0
 ) {
     // Initialize cache if it's the first call
     if (!cache.initialized) {
@@ -29,9 +31,11 @@ export function checkBuildingCollision(
         cache.hit = false;
         cache.height = 0;
         cache.lastPosition = null;
+        cache.lastVerticalCheck = null;
+        cache.rooftopData = [];  // Store multiple rooftop heights for better landing accuracy
     }
     
-    // Check if horizontal movement occurred (WASD keys) - preserved from original
+    // Check if movement occurred
     const isHorizontalMovement = inputState && (
         inputState.forward || 
         inputState.backward || 
@@ -39,10 +43,18 @@ export function checkBuildingCollision(
         inputState.strafeRight
     );
     
+    // Also check for vertical movement (new)
+    const isVerticalMovement = inputState && (
+        inputState.moveUp || 
+        inputState.moveDown ||
+        inputState.jump
+    );
+    
     // Default result (no hit)
     const result = {
         hit: false,
-        height: 0
+        height: 0,
+        rooftopType: null
     };
     
     // Early exit conditions 
@@ -53,6 +65,7 @@ export function checkBuildingCollision(
     }
     
     // 2. Player is below the height threshold and we don't have a cached hit
+    // (Keep this optimization for ground-level scenarios)
     if (playerPosition.height < heightThreshold && !(cache && cache.hit)) {
         // Only update cache if we need to
         if (cache.valid === false) {
@@ -63,19 +76,35 @@ export function checkBuildingCollision(
         return result;
     }
     
-    // Check if the player has moved far enough horizontally to warrant a new collision check
+    // Check if we need a new raycast based on:
+    // 1. Cache invalidation
+    // 2. Horizontal movement beyond threshold
+    // 3. Vertical movement beyond threshold (new)
     let needsNewRaycast = !cache.valid;
     
-    if (cache.lastPosition && isHorizontalMovement) {
-        const horizontalDistanceMoved = calculateHorizontalDistance(
-            playerPosition.longitude, 
-            playerPosition.latitude, 
-            cache.lastPosition.longitude, 
-            cache.lastPosition.latitude
-        );
-        needsNewRaycast = horizontalDistanceMoved >= minMovementDistance;
-    } else if (isHorizontalMovement) {
-        // If there's no last position but movement is happening, we need a raycast
+    if (cache.lastPosition) {
+        if (isHorizontalMovement) {
+            const horizontalDistanceMoved = calculateHorizontalDistance(
+                playerPosition.longitude, 
+                playerPosition.latitude, 
+                cache.lastPosition.longitude, 
+                cache.lastPosition.latitude
+            );
+            needsNewRaycast = needsNewRaycast || horizontalDistanceMoved >= minMovementDistance;
+        }
+        
+        // Check vertical movement threshold (new)
+        if (cache.lastVerticalCheck !== null) {
+            const verticalDistanceMoved = Math.abs(playerPosition.height - cache.lastVerticalCheck);
+            needsNewRaycast = needsNewRaycast || verticalDistanceMoved >= minVerticalDistance;
+        }
+    } else {
+        // If there's no last position, we need a raycast
+        needsNewRaycast = true;
+    }
+    
+    // Also force raycast during active vertical movement for better landing accuracy (new)
+    if (isVerticalMovement) {
         needsNewRaycast = true;
     }
     
@@ -83,7 +112,8 @@ export function checkBuildingCollision(
     if (cache.valid && !needsNewRaycast) {
         return {
             hit: cache.hit,
-            height: cache.height
+            height: cache.height,
+            rooftopData: cache.rooftopData
         };
     }
     
@@ -117,12 +147,21 @@ export function checkBuildingCollision(
         // Create ray for intersection testing
         const ray = new Cesium.Ray(playerCartesian, downDirectionECEF);
         
-        // Try different approaches to ray intersection - preserved from original for reliability
+        // Use a more comprehensive approach with multiple intersection attempts
+        // First, try with the buildings tileset specifically (most accurate)
         let intersections = viewer.scene.drillPickFromRay(ray, maxDistance, [osmBuildingsTileset]);
         
-        // If no results, try without specifying the tileset (fallback from original)
+        // If no results, try with a wider sampling method
         if (!intersections || intersections.length === 0) {
+            // Try without specifying the tileset
             intersections = viewer.scene.drillPickFromRay(ray, maxDistance);
+            
+            // If still no results and we're actively moving down, try with increased distance
+            if ((!intersections || intersections.length === 0) && 
+                inputState && inputState.moveDown) {
+                const extendedMaxDistance = maxDistance * 1.5;
+                intersections = viewer.scene.drillPickFromRay(ray, extendedMaxDistance);
+            }
         }
         
         if (!intersections || intersections.length === 0) {
@@ -134,12 +173,13 @@ export function checkBuildingCollision(
                 longitude: playerPosition.longitude,
                 latitude: playerPosition.latitude
             };
+            cache.lastVerticalCheck = playerPosition.height;
+            cache.rooftopData = [];
             return result;
         }
         
-        // Process results - using original logic which is proven to work well
-        let closestIntersection = null;
-        let closestDistance = Infinity;
+        // Process results - store multiple intersections for better accuracy
+        let rooftops = [];
         
         for (let i = 0; i < intersections.length; i++) {
             const intersection = intersections[i];
@@ -148,7 +188,7 @@ export function checkBuildingCollision(
                 continue;
             }
             
-            // The position might be directly in the intersection object or in a .object property
+            // Get position data using various methods, depending on what's available
             let position = intersection.position || 
                          (intersection.object ? intersection.object.position : null);
             
@@ -164,37 +204,64 @@ export function checkBuildingCollision(
             
             const distance = Cesium.Cartesian3.distance(playerCartesian, position);
             
+            // Skip if too close (likely self-intersection)
+            if (distance < 0.1) {
+                continue;
+            }
+            
             // Convert to cartographic to get height
             const intersectionCartographic = Cesium.Cartographic.fromCartesian(position);
             
             // Ensure we're below the player (within reason)
             const isBelow = intersectionCartographic.height < rayStartHeight - 0.5;
             
-            if (isBelow && distance < closestDistance && distance > 0.01) {
-                closestDistance = distance;
-                closestIntersection = {
+            if (isBelow && distance > 0.01 && distance <= maxDistance) {
+                // Calculate some properties about the rooftop
+                const distanceFromPlayer = rayStartHeight - intersectionCartographic.height;
+                
+                // Get feature information if available
+                let featureType = "unknown";
+                if (intersection.primitive && intersection.primitive.metadata) {
+                    featureType = intersection.primitive.metadata.getProperty("type") || 
+                                intersection.primitive.metadata.getProperty("_batchId") || 
+                                "building";
+                }
+                
+                // Store this rooftop
+                rooftops.push({
                     position: position,
-                    cartographic: intersectionCartographic
-                };
+                    cartographic: intersectionCartographic,
+                    height: intersectionCartographic.height,
+                    distance: distance,
+                    distanceFromPlayer: distanceFromPlayer,
+                    type: featureType
+                });
             }
         }
         
-        // If we found a valid intersection
-        if (closestIntersection && closestIntersection.position) {
-            const intersectionCartographic = closestIntersection.cartographic;
+        // If we found valid rooftops, sort them by distance and update the cache
+        if (rooftops.length > 0) {
+            // Sort rooftops by distance (closest first)
+            rooftops.sort((a, b) => a.distance - b.distance);
             
-            // Store the result in the cache
+            // Get the closest rooftop
+            const closestRooftop = rooftops[0];
+            
+            // Store the results in the cache
             cache.valid = true;
             cache.hit = true;
-            cache.height = intersectionCartographic.height;
+            cache.height = closestRooftop.height;
             cache.lastPosition = {
                 longitude: playerPosition.longitude,
                 latitude: playerPosition.latitude
             };
+            cache.lastVerticalCheck = playerPosition.height;
+            cache.rooftopData = rooftops.slice(0, 3); // Store up to 3 closest rooftops
             
-            // Return hit result with building height
+            // Return hit result with building height and type
             result.hit = true;
-            result.height = intersectionCartographic.height;
+            result.height = closestRooftop.height;
+            result.rooftopData = cache.rooftopData;
             return result;
         }
     } catch (error) {
@@ -209,6 +276,8 @@ export function checkBuildingCollision(
         longitude: playerPosition.longitude,
         latitude: playerPosition.latitude
     };
+    cache.lastVerticalCheck = playerPosition.height;
+    cache.rooftopData = [];
     
     return result;
 }

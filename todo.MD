@@ -1,7 +1,5 @@
 Spin up some other cesium tokens 
 
-forward movement speed should increase as you hold W more (ramp up)
-
 Speed boost, jetpack, bird mode, plane mode, car mode, coins, etc.....
 
 different style palettes for buildings / shader options (cyberpunk, realistic, day-night mode, sun, rain, snow, etc..)
@@ -14,15 +12,11 @@ Player is rotating in 3D when arrow keys are used -- not right
 
 Different sky options (gradient, sunset, night, etc...)
 
-Style nearby buildings with shaders??
-
 Make "levels" in different cities where the player has to land on a building or get to a certain location as fast as possible (or collect secret items)
 
 multiplayer
 
 players can leave markers / notes for their favourite locations (saved to local storage) -- pictures, spotlights, minimap markers -- as if they are pinning on google maps
-
-More locations (enter gps coordinates or use current user location)
 
 Can we do some caching in local storage to reduce bing maps sessions / data streaming from cesium
 
@@ -34,12 +28,9 @@ mobile support -- nipple.js
 
 Refactor and improve code for fps
 
-Only re-check buildling collision if moving more than x meters
-
 Sound effects and music
 
-Make the dramatic initial fall happen whenever you teleport to a new city
--- add an overlay that highlights hte city name for a few seconds
+when teleporting -- add an overlay that highlights the city name (and emoji?) for a few seconds
 
 Add city chooser at the start menu?
 
@@ -54,12 +45,9 @@ Different challenges in each city
 - drink wine in Paris
 - etc....
 - instruciton popups or menu
-- 
 
 Add billboards or spotlights in cities showing key attractions
 
 Night mode
-
-Toggle building opacity / color
 
 Sound effect / animation effect with the panda jumps (booster effect / blast-off)
