@@ -487,7 +487,7 @@ class MiniMap {
             ctx.lineWidth = 3;
             
             // Position in upper right with padding
-            const padding = 20;
+            const padding = 30;
             ctx.strokeText(this.neighborhood, padding, padding);
             ctx.fillText(this.neighborhood, padding, padding);
         }

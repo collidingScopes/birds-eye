@@ -1,6 +1,3 @@
-// Import Three.js as an ES Module
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.min.js';
-// Updated import: Combine imports from initial-setup.js and remove helper-functions.js import
 import {
     initThree,
     initCesium,
@@ -18,7 +15,6 @@ import {
 } from './initial-setup.js';
 import { checkBuildingCollision } from './building-collision.js';
 import { CameraSystem } from './camera-system.js';
-import { AnimationSystem } from './animation-system.js'; // This might be redundant if handled inside initThree
 import { TerrainManager } from './terrain-manager.js';
 import { createBuildingColorManager } from './building-shaders.js';
 // Import the new location options module
@@ -76,7 +72,6 @@ const buildingCache = {
 
 // DOM Elements
 const instructionsElement = document.getElementById('instructions');
-const citySelector = document.getElementById('citySelector');
 const fpsCounter = document.getElementById('fpsCounter');
 
 // FPS Tracking
