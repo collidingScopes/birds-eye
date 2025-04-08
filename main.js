@@ -607,7 +607,9 @@ function update(currentTime) {
 
     //Render Cesium scene
     viewer.scene.globe.show = true;
-    viewer.scene.backgroundColor = new Cesium.Color(0.678, 0.847, 0.902, 1);
+    if (!buildingColorManager || !buildingColorManager.getSettings().enabled) {
+        viewer.scene.backgroundColor = new Cesium.Color(0.678, 0.847, 0.902, 1);
+    }
     viewer.render();
 
     // Render Three.js main scene (player, etc.) on top
