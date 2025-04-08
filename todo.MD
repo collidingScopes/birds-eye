@@ -55,3 +55,7 @@ Different challenges in each city
 - etc....
 - instruciton popups or menu
 - 
+
+Add billboards or spotlights in cities showing key attractions
+
+Night mode

@@ -23,6 +23,10 @@ export const cities = {
     sanfrancisco: { longitude: -122.4194, latitude: 37.7749 },
     berlin: { longitude: 13.4050, latitude: 52.5200 },
     riodejaneiro: { longitude: -43.1729, latitude: -22.9068 },
+    chicago: { longitude: -87.6298, latitude: 41.8781 },
+    dubai: { longitude: 55.2708, latitude: 25.2048 },
+    kualalumpur: { longitude: 101.6869, latitude: 3.1390 },
+    singapore: { longitude: 103.8198, latitude: 1.3521 },
 };
 
 /**
