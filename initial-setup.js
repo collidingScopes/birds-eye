@@ -290,11 +290,9 @@ export function setupInputListeners(
                 // Use camera system for teleportation - modified to look down more
                 if (cameraSystemInstance) {
                     const teleportCameraPitch = Cesium.Math.toRadians(45); // Looking down more
-                    const teleportDuration = 0.0;
                     await cameraSystemInstance.teleport(
                         playerPosition,
                         playerHeadingRef.value,
-                        teleportDuration,
                         teleportCameraPitch
                     );
                     console.log("Teleportation complete, dramatic fall active with player control");
@@ -331,7 +329,7 @@ export function setupInputListeners(
                     }, 3000);
                 }
                 if (cameraSystemInstance) {
-                    cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value, 1.0);
+                    cameraSystemInstance.teleport(playerPosition, playerHeadingRef.value);
                 }
             }
         }

@@ -204,7 +204,7 @@ export class CameraSystem {
      * @param {number} duration - Flight duration in seconds (0 for instant)
      * @param {number} customPitch - Optional custom pitch angle in radians
      */
-    teleport(playerPosition, playerHeading, duration, customPitch = null) {
+    teleport(playerPosition, playerHeading, customPitch = null) {
         this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
         // Only reset pitch if customPitch is provided
         if (customPitch !== null) {

@@ -110,7 +110,7 @@ async function initialize() {
 
     populateCitySelector(cities);
     console.log("City selector populated");
-    
+
     three = await initThree(); // initThree is imported from initial-setup.js
     console.log("Three.js initialized");
 
@@ -213,7 +213,7 @@ async function initialize() {
 
         // Start with camera looking downward
         const initialCameraPitch = Cesium.Math.toRadians(45);
-        cameraSystem.teleport(playerPosition, playerHeading, 0, initialCameraPitch);
+        cameraSystem.teleport(playerPosition, playerHeading, initialCameraPitch);
         cameraSystem.syncThreeCamera();
 
         instructionsElement.innerHTML = "Entering the city... Use WASD to move and Arrow keys to look around while falling!";
