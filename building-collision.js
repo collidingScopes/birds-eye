@@ -215,7 +215,7 @@ export function checkBuildingCollision(
             // FIX: Validate building height - Skip negative heights or those too close to zero
             // This is the key fix that prevents negative building heights from being used
             if (intersectionCartographic.height <= 0) {
-                console.warn(`Ignoring invalid building height: ${intersectionCartographic.height}m`);
+                //console.warn(`Ignoring invalid building height: ${intersectionCartographic.height}m`);
                 continue;
             }
             
