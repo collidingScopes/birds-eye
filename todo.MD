@@ -50,4 +50,4 @@ Add billboards or spotlights in cities showing key attractions
 
 Night mode
 
-First person vs. third-person mode toggle
+Mirror's Edge style hands / feets coming into animation during first person cam?

@@ -30,10 +30,8 @@ class MiniMap {
             minLat: 0, maxLat: 0,
             minLon: 0, maxLon: 0
         };
-        
-        // Current neighborhood name
-        this.neighborhood = "";
-        
+
+
         // Setup the container styles
         this.setupStyles();
     
@@ -184,47 +182,12 @@ class MiniMap {
             const data = await response.json();
             this.processData(data);
             
-            // Also get neighborhood data
-            this.fetchNeighborhoodData();
-            
         } catch (error) {
             console.warn('Error fetching map data:', error);
             // If we failed to load data, try again later
             this.hasData = this.hasData && this.currentData !== null;
         } finally {
             this.isLoading = false;
-        }
-    }
-    
-    async fetchNeighborhoodData() {
-        try {
-            const query = `
-                [out:json];
-                is_in(${this.playerLat},${this.playerLon})->.a;
-                relation(pivot.a)["place"="neighbourhood"];
-                out tags;
-            `;
-            
-            const response = await fetch('https://overpass-api.de/api/interpreter', {
-                method: 'POST',
-                body: 'data=' + encodeURIComponent(query),
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                if (data.elements && data.elements.length > 0) {
-                    // Find neighborhood with name
-                    const neighborhood = data.elements.find(el => el.tags && el.tags.name);
-                    if (neighborhood) {
-                        this.neighborhood = neighborhood.tags.name;
-                    }
-                }
-            }
-        } catch (error) {
-            console.warn('Error fetching neighborhood data:', error);
         }
     }
     
@@ -476,21 +439,6 @@ class MiniMap {
             
             ctx.restore();
         });
-        
-        // Draw neighborhood name in the top-left corner
-        if (this.neighborhood) {
-            ctx.font = 'bold 14px Arial';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillStyle = '#33ccff'; // Light blue for neighborhood name
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 3;
-            
-            // Position in upper right with padding
-            const padding = 30;
-            ctx.strokeText(this.neighborhood, padding, padding);
-            ctx.fillText(this.neighborhood, padding, padding);
-        }
         
         // Draw player position (always centered)
         const centerX = canvas.width / 2;
