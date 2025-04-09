@@ -53,7 +53,7 @@ export class JumpBoostEffect {
                     vec3 color = mix(color1, color2, sin(time * 3.0) * 0.5 + 0.5);
                     
                     // Fade out as ring expands
-                    float alpha = ring * (1.0 - progress * 0.8);
+                    float alpha = ring * (1.0 - progress * 0.5);
                     
                     gl_FragColor = vec4(color, alpha);
                 }

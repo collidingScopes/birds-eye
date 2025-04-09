@@ -31,7 +31,7 @@ export const cities = {
     chicago: { longitude: -87.6298, latitude: 41.8781, displayName: 'Chicago' },
     dubai: { longitude: 55.2708, latitude: 25.2048, displayName: 'Dubai' },
     kualalumpur: { longitude: 101.6869, latitude: 3.1390, displayName: 'Kuala Lumpur' },
-    singapore: { longitude: 103.8198, latitude: 1.3521, displayName: 'Singapore' },
+    singapore: { longitude: 103.8591, latitude: 1.2838, displayName: 'Singapore' },
     venice: { longitude: 12.3155, latitude: 45.4408, displayName: 'Venice' },
     dubrovnik: { longitude: 18.0944, latitude: 42.6507, displayName: 'Dubrovnik' },
     amsterdam: { longitude: 4.9041, latitude: 52.3676, displayName: 'Amsterdam' },
