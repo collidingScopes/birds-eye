@@ -62,6 +62,7 @@ export const cities = {
     marrakech: { longitude: -8.0083, latitude: 31.6295, displayName: 'Marrakech' },
     santorini: { longitude: 25.4615, latitude: 36.3932, displayName: 'Santorini' }
 };
+let currentCity = "NYC";
 
 // --- End Constants ---
 
@@ -286,7 +287,9 @@ export function setupInputListeners(
                 // If space flight animation is available, use it
                 if (spaceFlightAnimation) {
                     console.log("Using space flight animation for city change");
-                    
+                    document.querySelector("#display-text").classList.remove('hidden');
+                    document.querySelector("#display-text").innerHTML = currentCity+" 🚀 "+cities[selectedCity].displayName;
+                    currentCity = cities[selectedCity].displayName;
                     // Set camera system as animating
                     if (cameraSystemInstance) {
                         cameraSystemInstance.setAnimatingState(true);
@@ -305,7 +308,8 @@ export function setupInputListeners(
                         () => {
                             // Animation complete callback
                             console.log("Space flight animation complete");
-                            
+                            document.querySelector("#display-text").classList.add('hidden');
+
                             // Update player position at animation end
                             playerPosition.longitude = targetPosition.longitude;
                             playerPosition.latitude = targetPosition.latitude;
@@ -317,7 +321,7 @@ export function setupInputListeners(
                             }
                         }
                     );
-                    
+
                     // Return early as animation will handle the transition
                     return;
                 }

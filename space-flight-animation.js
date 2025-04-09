@@ -9,13 +9,13 @@ export class SpaceFlightAnimation {
      * @param {Object} viewer - The Cesium viewer instance
      * @param {Object} cameraSystem - The camera system 
      * @param {Object} terrainManager - The terrain manager
-     * @param {HTMLElement} instructionsElement - Element to display instructions
+     * @param {HTMLElement} displayElement - Element to display city names
      */
-    constructor(viewer, cameraSystem, terrainManager, instructionsElement) {
+    constructor(viewer, cameraSystem, terrainManager, displayElement) {
         this.viewer = viewer;
         this.cameraSystem = cameraSystem;
         this.terrainManager = terrainManager;
-        this.instructionsElement = instructionsElement;
+        this.displayElement = displayElement;
         this.isAnimating = false;
         this.spaceHeight = 2000000; // Maximum height in meters (10,000 km - space altitude)
         this.animationDuration = 12.0; // Animation duration in seconds
@@ -86,13 +86,7 @@ export class SpaceFlightAnimation {
         this.viewer.scene.screenSpaceCameraController.enableZoom = false;
         this.viewer.scene.screenSpaceCameraController.enableTilt = false;
         this.viewer.scene.screenSpaceCameraController.enableLook = false;
-        
-        if (this.instructionsElement) {
-            const selectedCity = this.getDisplayNameFromCoordinates(targetPosition);
-            this.instructionsElement.innerHTML = `Flying to ${selectedCity || 'new location'}...`;
-            this.instructionsElement.classList.add('animating');
-        }
-        
+               
         // Start animation loop
         requestAnimationFrame(this.animate);
     }
@@ -172,11 +166,6 @@ export class SpaceFlightAnimation {
         
         // Update camera
         this.updateCameraForAnimation(cameraPosition, cameraHeading, cameraPitch);
-        
-        // Update instructions
-        if (this.instructionsElement && this.currentAnimationStep === 1) {
-            this.instructionsElement.innerHTML = `Rising to space...`;
-        }
     }
     
     /**
@@ -202,12 +191,6 @@ export class SpaceFlightAnimation {
 
         // Update camera
         this.updateCameraForAnimation(cameraPosition, this.cameraSystem.getHeading(), cameraPitch);
-        
-        // Update instructions
-        if (this.instructionsElement && this.currentAnimationStep === 2) {
-            const selectedCity = this.getDisplayNameFromCoordinates(this.targetPosition);
-            this.instructionsElement.innerHTML = `Flying to ${selectedCity || 'destination'}...`;
-        }
     }
     
     /**
@@ -230,17 +213,10 @@ export class SpaceFlightAnimation {
             height: currentHeight
         };
 
-        // Keep camera heading pointed north
         const cameraHeading = this.cameraSystem.getHeading();
         
         // Update camera
         this.updateCameraForAnimation(cameraPosition, cameraHeading, cameraPitch);
-        
-        // Update instructions
-        if (this.instructionsElement && this.currentAnimationStep === 3) {
-            const selectedCity = this.getDisplayNameFromCoordinates(this.targetPosition);
-            this.instructionsElement.innerHTML = `Arriving at ${selectedCity || 'destination'}...`;
-        }
     }
     
     /**
@@ -363,14 +339,7 @@ export class SpaceFlightAnimation {
                 this.verticalVelocityRef.value = -10.0;
             }
         }
-        
-        // Update instructions
-        if (this.instructionsElement) {
-            const selectedCity = this.getDisplayNameFromCoordinates(this.targetPosition);
-            this.instructionsElement.innerHTML = `Skydiving into ${selectedCity || 'the city'}... Use WASD to move and Arrow keys to look around!`;
-            this.instructionsElement.classList.remove('animating');
-        }
-        
+                
         // Call completion callback
         if (typeof this.onComplete === 'function') {
             this.onComplete();
@@ -410,10 +379,6 @@ export class SpaceFlightAnimation {
                 this.previousCameraControls.enableTilt;
             this.viewer.scene.screenSpaceCameraController.enableLook = 
                 this.previousCameraControls.enableLook;
-        }
-        
-        if (this.instructionsElement) {
-            this.instructionsElement.classList.remove('animating');
         }
     }
 }

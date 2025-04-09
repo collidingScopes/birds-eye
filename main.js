@@ -35,6 +35,7 @@ let playerPosition = Cesium.Cartographic.fromDegrees(
     groundHeight + DRAMATIC_FALL_HEIGHT // Use constants imported from initial-setup.js
 );
 let terrainManager;
+let displayText = document.querySelector("#display-text");
 
 // Coordinate System Convention:
 // playerHeading & cameraHeading: Radians. Measured CLOCKWISE from NORTH.
@@ -157,7 +158,7 @@ async function initialize() {
         viewer,
         cameraSystem,
         terrainManager,
-        instructionsElement
+        displayText
     );
     
     // Register the space flight animation with the camera system
