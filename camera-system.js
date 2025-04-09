@@ -278,7 +278,7 @@ export class CameraSystem {
         if (changed) {
             this.cameraPitch = Cesium.Math.clamp(
                 this.cameraPitch,
-                Cesium.Math.toRadians(-20.0),
+                Cesium.Math.toRadians(-45.0),
                 Cesium.Math.toRadians(45.0)
             );
         }

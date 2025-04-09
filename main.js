@@ -405,7 +405,7 @@ function update(currentTime) {
                     threePosition = new THREE.Vector3(0, 0, 0);
                 }
                 
-                jumpBoostEffect.triggerJump(threePosition);
+                if(!isFirstPersonMode) jumpBoostEffect.triggerJump(threePosition);
             }
         }
         verticalVelocity += gravity * deltaTime;
