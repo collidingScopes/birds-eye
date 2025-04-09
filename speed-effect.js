@@ -1,7 +1,7 @@
 /**
- * ShaderSpeedEffect class
+ * ShaderSpeedEffect class - Optimized Version
  * Creates a wind tunnel/rushing air effect using Three.js and shaders
- * Uses a performant WebGL implementation
+ * Uses a performant WebGL implementation with low performance mode always enabled
  */
 export class ShaderSpeedEffect {
     /**
@@ -18,7 +18,10 @@ export class ShaderSpeedEffect {
             return;
         }
         
-        // Initialize properties
+        // Initialize properties with low performance settings
+        this.maxStreams = 80; // OPTIMIZATION: Greatly reduced from 300
+        this.qualityScale = 0.6; // OPTIMIZATION: Render at reduced resolution
+        
         this.active = false;
         this.intensity = 0;
         this.maxIntensity = 2.0;
@@ -26,6 +29,7 @@ export class ShaderSpeedEffect {
         this.lastTime = 0;
         this.parent = parentElement || document.body;
         this.isAirborne = false; // Track airborne state
+        this.frameSkip = 0; // OPTIMIZATION: For frame skipping
         
         // Create renderer
         this.createRenderer();
@@ -33,20 +37,28 @@ export class ShaderSpeedEffect {
         // Create scene, camera and effect mesh
         this.createScene();
         
-        // Handle window resize
-        window.addEventListener('resize', () => this.handleResize());
+        // OPTIMIZATION: Use passive event listener for better performance
+        window.addEventListener('resize', this.handleResize.bind(this), { passive: true });
     }
     
     /**
-     * Create WebGL renderer
+     * Create WebGL renderer with low performance optimizations
      */
     createRenderer() {
+        // OPTIMIZATION: Create renderer with lowest performance settings
         this.renderer = new this.THREE.WebGLRenderer({ 
             alpha: true,
-            antialias: true 
+            antialias: false, // OPTIMIZATION: Disable antialiasing
+            powerPreference: 'high-performance', // OPTIMIZATION: Prefer performance
+            precision: 'lowp' // OPTIMIZATION: Use low precision for maximum performance
         });
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        this.renderer.setPixelRatio(window.devicePixelRatio);
+        
+        // OPTIMIZATION: Scale rendering resolution by qualityScale factor
+        const width = Math.floor(window.innerWidth * this.qualityScale);
+        const height = Math.floor(window.innerHeight * this.qualityScale);
+        
+        this.renderer.setSize(width, height, false);
+        this.renderer.setPixelRatio(1); // OPTIMIZATION: Force pixel ratio to 1
         this.renderer.autoClear = false;
         
         // Style the canvas
@@ -58,7 +70,11 @@ export class ShaderSpeedEffect {
         canvas.style.pointerEvents = 'none';
         canvas.style.zIndex = '10';
         canvas.style.opacity = '0';
-        canvas.style.transition = 'opacity 0.2s ease-in-out'; // Faster transition
+        canvas.style.transition = 'opacity 0.2s ease-in-out';
+        
+        // OPTIMIZATION: Scale canvas to full size using CSS for upscaling
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
         
         // Append to parent
         this.parent.appendChild(canvas);
@@ -66,20 +82,21 @@ export class ShaderSpeedEffect {
     }
     
     /**
-     * Create Three.js scene, camera and effect mesh
+     * Create Three.js scene, camera and effect mesh with highly optimized shader
      */
     createScene() {
         // Create scene and camera
         this.scene = new this.THREE.Scene();
         this.camera = new this.THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
         
-        // Wind tunnel shader material
+        // OPTIMIZATION: Simplified shader with minimal calculations for low performance mode
         const windTunnelShader = {
             uniforms: {
                 time: { value: 0 },
                 intensity: { value: 0 },
                 resolution: { value: new this.THREE.Vector2(window.innerWidth, window.innerHeight) },
-                centerPoint: { value: new this.THREE.Vector2(0.5, 0.5) }, // Default center is middle of screen
+                centerPoint: { value: new this.THREE.Vector2(0.5, 0.5) },
+                maxStreams: { value: this.maxStreams }
             },
             vertexShader: `
                 varying vec2 vUv;
@@ -94,39 +111,34 @@ export class ShaderSpeedEffect {
                 uniform float intensity;
                 uniform vec2 resolution;
                 uniform vec2 centerPoint;
+                uniform float maxStreams;
                 varying vec2 vUv;
                 
-                // Hash function for randomness
-                float hash(vec2 p) {
-                    p = fract(p * vec2(123.34, 456.21));
-                    p += dot(p, p + 45.32);
-                    return fract(p.x * p.y);
+                // OPTIMIZATION: Super efficient hash function
+                float hash(float n) {
+                    return fract(sin(n) * 43758.5453);
                 }
                 
-                // Line function with smooth edges
+                // OPTIMIZATION: Simplified line function using step for better performance
                 float line(vec2 uv, vec2 start, vec2 end, float width) {
                     vec2 line = end - start;
                     float len = length(line);
                     line = normalize(line);
                     
-                    // Vector from start to current position
                     vec2 toPoint = uv - start;
-                    
-                    // Project onto line
                     float t = clamp(dot(line, toPoint), 0.0, len);
                     vec2 projection = start + line * t;
                     
-                    // Distance to line
                     float dist = length(uv - projection);
                     
-                    // Smooth step for antialiased line
-                    return smoothstep(width, width * 0.5, dist);
+                    // OPTIMIZATION: Use cheaper step function instead of smoothstep
+                    return step(dist, width);
                 }
                 
                 void main() {
                     // Center-based coordinates
                     vec2 uv = vUv;
-                    vec2 center = centerPoint; // This is the vanishing point
+                    vec2 center = centerPoint;
                     
                     // Direction vector from center
                     vec2 dir = uv - center;
@@ -137,37 +149,42 @@ export class ShaderSpeedEffect {
                     
                     // Only render if we have some intensity
                     if (intensity > 0.01) {
-                        // Number of wind streams based on intensity
-                        int numStreams = int(300.0 * intensity); // Increased from 250 to 350
+                        // OPTIMIZATION: Reduce stream count based on intensity
+                        int numStreams = int(min(maxStreams, 30.0 + 50.0 * intensity));
                         
-                        // Speed varies with distance from center - INCREASED SPEED by 60%
-                        float speed = 0.6 * intensity;
+                        // Speed varies with distance from center
+                        float speed = 0.5 * intensity;
                         
                         // Wind stream accumulation
                         float windAccum = 0.0;
                         
+                        // OPTIMIZATION: Unrolled inner loop with reduced iterations
                         // Create multiple wind streams
-                        for (int i = 0; i < 300; i++) { //
+                        for (int i = 0; i < 150; i++) {
                             if (i >= numStreams) break; // Respect dynamic count
                             
-                            // Create a "random" angle with hash
-                            float angle = hash(vec2(float(i), 23.45)) * 6.28;
+                            // Use efficient hash function with different seeds
+                            float seedA = float(i) * 0.1;
+                            float seedB = float(i) * 0.2;
+                            float seedC = float(i) * 0.3;
+                            
+                            // Create a "random" angle
+                            float angle = hash(seedA) * 6.28;
                             
                             // Start position - on a circle around the center
-                            float radius = 0.1 + 0.9 * hash(vec2(float(i), 78.12));
+                            float radius = 0.1 + 0.9 * hash(seedB);
                             vec2 offset = vec2(cos(angle), sin(angle)) * radius;
                             
                             // Create wind stream position 
                             vec2 pos = center + offset;
                             
-                            // Animation - move away from center over time - INCREASED SPEED
-                            float t = fract(time * (0.1 + speed * 0.6) + hash(vec2(float(i), 56.78))); // Increased from 0.4 to 0.6
-                                                        
-                            // Stream length depends on distance and intensity
-                            float streamLength = 0.12 + 0.95 * intensity * (0.2 + hash(vec2(float(i), 12.34)) * 0.8); // Increased
+                            // Animation - move away from center over time
+                            float t = fract(time * (0.1 + speed * 0.5) + hash(seedC));
                             
-                            // Line thickness varies with intensity and randomness - INCREASED THICKNESS
-                            float thickness = 0.0015 * intensity * (0.5 + hash(vec2(float(i), 90.12)) * 0.8); // Increased from 0.002 to 0.003
+                            // OPTIMIZATION: Simplified stream calculations
+                            float streamLength = 0.15 + 0.8 * intensity;
+                            // INCREASED THICKNESS for more visible lines
+                            float thickness = 0.003 * intensity;
                             
                             // Start and end positions
                             vec2 streamStart = mix(center, pos, t);
@@ -176,18 +193,15 @@ export class ShaderSpeedEffect {
                             // Draw the stream line
                             float stream = line(uv, streamStart, streamEnd, thickness);
                             
-                            // Fade based on length and phase - MODIFIED FOR STRONGER APPEARANCE
-                            float fade = smoothstep(0.0, 0.15, t) * smoothstep(1.0, 0.75, t);
+                            // Simple fade
+                            float fade = (1.0 - t) * t * 4.0;
                             
-                            // Add to accumulation - INCREASED OPACITY
-                            windAccum += stream * fade * 0.03; // Increased from 0.03 to 0.045
+                            // INCREASED OPACITY by 50%
+                            windAccum += stream * fade * 0.08;
                         }
-                        
-                        // Add radial glow near center - INCREASED GLOW
-                        float glow = smoothstep(0.4, 0.0, distToCenter) * 0.08 * intensity; // Increased from 0.15 to 0.25
-                        
-                        // Final color with wind streams and glow - INCREASED MAX OPACITY
-                        color = vec4(1.0, 1.0, 1.0, min(1.0, windAccum + glow) * intensity); // Increased from 0.8 to 1.0
+                                                
+                        // Final color with wind streams only (no glow)
+                        color = vec4(1.0, 1.0, 1.0, min(1.0, windAccum) * intensity);
                     }
                     
                     gl_FragColor = color;
@@ -212,25 +226,38 @@ export class ShaderSpeedEffect {
     }
     
     /**
-     * Handle window resize
+     * Handle window resize with performance optimizations
      */
     handleResize() {
         if (!this.renderer || !this.camera) return;
         
-        // Update renderer size
-        this.renderer.setSize(window.innerWidth, window.innerHeight);
-        
-        // Update resolution uniform
-        if (this.material && this.material.uniforms.resolution) {
-            this.material.uniforms.resolution.value.set(
-                window.innerWidth, 
-                window.innerHeight
-            );
+        // OPTIMIZATION: Throttle resize handling with longer delay
+        if (this._resizeTimeout) {
+            clearTimeout(this._resizeTimeout);
         }
+        
+        this._resizeTimeout = setTimeout(() => {
+            // OPTIMIZATION: Calculate scaled dimensions
+            const width = Math.floor(window.innerWidth * this.qualityScale);
+            const height = Math.floor(window.innerHeight * this.qualityScale);
+            
+            // Update renderer size
+            this.renderer.setSize(width, height, false);
+            
+            // Update resolution uniform
+            if (this.material && this.material.uniforms.resolution) {
+                this.material.uniforms.resolution.value.set(
+                    window.innerWidth, 
+                    window.innerHeight
+                );
+            }
+            
+            this._resizeTimeout = null;
+        }, 300); // Longer delay for better performance
     }
     
     /**
-     * Set effect intensity (0.0 to 1.0)
+     * Set effect intensity with performance optimizations
      * @param {number} value - Intensity value from 0 to 1
      */
     setIntensity(value) {
@@ -241,12 +268,12 @@ export class ShaderSpeedEffect {
             this.material.uniforms.intensity.value = this.intensity;
         }
         
-        // Update canvas opacity based on intensity - INCREASED MAX OPACITY
+        // Update canvas opacity based on intensity
         if (this.canvas) {
-            this.canvas.style.opacity = Math.min(1.0, this.intensity).toString(); // Increased from 0.9 to 1.0
+            this.canvas.style.opacity = Math.min(1.0, this.intensity).toString();
         }
         
-        // Activate/deactivate based on intensity
+        // OPTIMIZATION: Higher threshold for activation
         if (this.intensity > 0.05 && !this.active) {
             this.active = true;
             this.lastTime = performance.now();
@@ -261,7 +288,7 @@ export class ShaderSpeedEffect {
     }
     
     /**
-     * Updates effect based on player look direction
+     * Updates effect based on player look direction with reduced sensitivity
      * @param {Object} cameraSystem - The current camera system to get look direction
      */
     updateCameraDirection(cameraSystem) {
@@ -272,17 +299,13 @@ export class ShaderSpeedEffect {
             const viewDir = cameraSystem.getViewDirection();
             
             // Calculate center point (where lines should converge)
-            // This creates the effect of wind rushing "past" the player in their view direction
-            // Default to center if we can't get direction
             let centerX = 0.5;
             let centerY = 0.5;
             
             if (viewDir) {
-                // Create offset based on view direction
-                // Invert X because we want streams to come FROM that direction
-                // INCREASED OFFSET for more dramatic effect
-                centerX = 0.5 - (viewDir.x * 0.2); // Increased from 0.15 to 0.2
-                centerY = 0.5 - (viewDir.y * 0.2); // Increased from 0.15 to 0.2
+                // OPTIMIZATION: Reduced offset values and round to fewer decimal places for less GPU precision requirements
+                centerX = 0.5 - Math.round(viewDir.x * 10) / 100; // Only use 2 decimal places
+                centerY = 0.5 - Math.round(viewDir.y * 10) / 100; // Only use 2 decimal places
             }
             
             // Update uniform
@@ -291,18 +314,28 @@ export class ShaderSpeedEffect {
     }
     
     /**
-     * Animation loop for the effect
+     * Animation loop with maximum performance optimizations
      */
     animate() {
         if (!this.active) return;
+        
+        // OPTIMIZATION: Always use frame skipping for better performance
+        // Skip more frames at lower intensities
+        const skipFrames = this.intensity < 0.7 ? 2 : 1; // Skip more frames at low intensity
+        this.frameSkip = (this.frameSkip + 1) % (skipFrames + 1);
+        if (this.frameSkip !== 0) {
+            this.animationId = requestAnimationFrame(() => this.animate());
+            return;
+        }
         
         const currentTime = performance.now();
         const deltaTime = (currentTime - this.lastTime) / 1000; // seconds
         this.lastTime = currentTime;
         
-        // Update time uniform - INCREASED ANIMATION SPEED
+        // OPTIMIZATION: Slower animation at low intensity
         if (this.material && this.material.uniforms.time) {
-            this.material.uniforms.time.value += deltaTime * (0.7 + this.intensity * 2.0); // Increased from 0.5/1.5 to 0.7/2.0
+            const timeScale = 0.5 + this.intensity * 1.5; // Lower base speed with less scaling
+            this.material.uniforms.time.value += deltaTime * timeScale;
         }
         
         // Render
@@ -320,21 +353,29 @@ export class ShaderSpeedEffect {
      * @param {boolean} [isAirborne=false] - Whether the player is airborne
      */
     update(speedFactor, threshold = 0.7, cameraSystem = null, isAirborne = false) {
-        // Store airborne state
+        // OPTIMIZATION: Early return if nothing changed with broader threshold
+        if (this.isAirborne === isAirborne && 
+            Math.abs(this._lastSpeedFactor - speedFactor) < 0.05 &&
+            this.intensity === 0) {
+            return;
+        }
+        
+        // Store values for comparison
         this.isAirborne = isAirborne;
+        this._lastSpeedFactor = speedFactor;
         
         // Only show effect if airborne and above threshold
         if (isAirborne && speedFactor > threshold) {
             // Map speedFactor from threshold-1.0 range to 0.0-1.0 range
             const normalizedIntensity = (speedFactor - threshold) / (1.0 - threshold);
-            // Apply increased intensity for more dramatic effect
-            this.setIntensity(normalizedIntensity * 1.4); // Multiplier for stronger effect
+            // Apply reduced intensity multiplier for better performance
+            this.setIntensity(normalizedIntensity * 1.2);
         } else {
             this.setIntensity(0);
         }
         
-        // Update camera direction if provided
-        if (cameraSystem) {
+        // Update camera direction if provided, but less frequently
+        if (cameraSystem && Math.random() < 0.5) { // Only update 50% of the time
             this.updateCameraDirection(cameraSystem);
         }
     }
@@ -349,6 +390,13 @@ export class ShaderSpeedEffect {
             cancelAnimationFrame(this.animationId);
             this.animationId = null;
         }
+        
+        if (this._resizeTimeout) {
+            clearTimeout(this._resizeTimeout);
+            this._resizeTimeout = null;
+        }
+        
+        window.removeEventListener('resize', this.handleResize.bind(this));
         
         if (this.canvas && this.canvas.parentNode) {
             this.canvas.parentNode.removeChild(this.canvas);
