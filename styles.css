@@ -126,3 +126,18 @@ html, body {
     background-color: rgba(70, 246, 255, 0.8);
     border-color: #fff;
 }
+
+#instructions.animating {
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #ffffff;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.8; }
+    50% { opacity: 1; }
+    100% { opacity: 0.8; }
+}

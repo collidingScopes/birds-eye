@@ -22,6 +22,7 @@ import { createBuildingColorManager } from './building-shaders.js';
 import { setupLocationOptions } from './location-options.js';
 import { JumpBoostEffect } from './jump-boost-animation.js';
 import { ShaderSpeedEffect } from './speed-effect.js';
+import { SpaceFlightAnimation } from './space-flight-animation.js';
 
 // --- Cesium Ion Access Token ---
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIxY2FhMzA2MS1jOWViLTRiYWUtODJmZi02YjAxMmM5MGI3MzkiLCJpZCI6MjkxMTc3LCJpYXQiOjE3NDM4ODA1Mjd9.Js54F7Sh9x04MT9-MjRAL5qm97R_pw7xSrAIS9I8wY4';
@@ -138,9 +139,6 @@ async function initialize() {
     three.renderer.setClearColor(0x000000, 0);
     three.renderer.autoClear = false;
 
-    cameraSystem = new CameraSystem(cesiumCamera, three.camera);
-    console.log("Camera system initialized");
-
     miniMap = new MiniMap(1000); // Assuming MiniMap is defined elsewhere or in a script tag
 
     // Use updateDirectionVectors imported from initial-setup.js
@@ -151,7 +149,21 @@ async function initialize() {
 
     fallStateRef.fallStartTime = performance.now();
 
-    // Set up standard input listeners using function imported from initial-setup.js
+    cameraSystem = new CameraSystem(cesiumCamera, three.camera);
+    console.log("Camera system initialized");
+    
+    // Create the space flight animation system
+    const spaceFlightAnimation = new SpaceFlightAnimation(
+        viewer,
+        cameraSystem,
+        terrainManager,
+        instructionsElement
+    );
+    
+    // Register the space flight animation with the camera system
+    cameraSystem.setSpaceFlightAnimation(spaceFlightAnimation);
+
+    // In the setupInputListeners call, pass the space flight animation
     setupInputListeners(
         inputState,
         playerPosition,
@@ -166,10 +178,11 @@ async function initialize() {
         cameraSystem,
         terrainManager,
         instructionsElement,
-        fallStateRef
+        fallStateRef,
+        spaceFlightAnimation // Pass the space flight animation
     );
-
-    // Set up the new location options
+    
+    // Also update the setupLocationOptions call to pass the space flight animation
     setupLocationOptions(
         inputState,
         playerPosition,
@@ -184,7 +197,8 @@ async function initialize() {
         cameraSystem,
         terrainManager,
         instructionsElement,
-        fallStateRef
+        fallStateRef,
+        spaceFlightAnimation // Pass the space flight animation
     );
 
     verticalVelocity = verticalVelocityRef.value;

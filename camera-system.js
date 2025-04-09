@@ -23,6 +23,9 @@ export class CameraSystem {
         
         // Player offset reference point - this is what we'll aim the camera at
         this.playerReferenceHeight = 0; // Height of the player's "eyes" or reference point above ground
+        
+        // Animation state
+        this.isAnimating = false;
     }
 
     /**
@@ -32,6 +35,9 @@ export class CameraSystem {
      * @param {Object} forwardDirection - Normalized forward direction vector
      */
     update(playerPosition, playerHeading, forwardDirection) {
+        // Skip normal updates if an animation is in progress
+        if (this.isAnimating) return;
+        
         // 1. Calculate player position in world coordinates
         const playerWorldPos = Cesium.Cartesian3.fromRadians(
             playerPosition.longitude,
@@ -146,6 +152,9 @@ export class CameraSystem {
      * @returns {Object} Object containing changed flag
      */
     updateControls(inputState, deltaTime, turnSpeed) {
+        // Skip control updates if an animation is in progress
+        if (this.isAnimating) return { changed: false };
+        
         let changed = false;
 
         if (inputState.left) {
@@ -201,79 +210,110 @@ export class CameraSystem {
      * Teleports the camera to a new position
      * @param {Object} playerPosition - New player position in cartographic coordinates
      * @param {number} playerHeading - New player heading in radians
-     * @param {number} duration - Flight duration in seconds (0 for instant)
      * @param {number} customPitch - Optional custom pitch angle in radians
+     * @param {boolean} useAnimation - Whether to use space flight animation
+     * @returns {Promise} Promise that resolves when teleport is complete
      */
-    teleport(playerPosition, playerHeading, customPitch = null) {
-        this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
-        // Only reset pitch if customPitch is provided
-        if (customPitch !== null) {
-            this.cameraPitch = customPitch;
-        } else {
-            this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch);
-        }
+    teleport(playerPosition, playerHeading, customPitch = null, useAnimation = false) {
+        return new Promise((resolve) => {
+            // If using animation and we have an animation system, delegate to it
+            if (useAnimation && this.spaceFlightAnimation) {
+                // Animation will be handled by the SpaceFlightAnimation class
+                // This will be set up in main.js
+                resolve();
+                return;
+            }
+            
+            // Standard teleport (no animation)
+            this.cameraHeading = (playerHeading + Math.PI) % (2 * Math.PI);
+            
+            // Only reset pitch if customPitch is provided
+            if (customPitch !== null) {
+                this.cameraPitch = customPitch;
+            } else {
+                this.cameraPitch = Cesium.Math.toRadians(this.initialCameraPitch);
+            }
 
-        // Create a copy of the player position to ensure it isn't modified during teleportation
-        const teleportPosition = {
-            longitude: playerPosition.longitude,
-            latitude: playerPosition.latitude,
-            height: playerPosition.height
-        };
+            // Create a copy of the player position to ensure it isn't modified during teleportation
+            const teleportPosition = {
+                longitude: playerPosition.longitude,
+                latitude: playerPosition.latitude,
+                height: playerPosition.height
+            };
 
-        const targetPlayerWorldPos = Cesium.Cartesian3.fromRadians(
-            teleportPosition.longitude,
-            teleportPosition.latitude,
-            teleportPosition.height
-        );
+            const targetPlayerWorldPos = Cesium.Cartesian3.fromRadians(
+                teleportPosition.longitude,
+                teleportPosition.latitude,
+                teleportPosition.height
+            );
 
-        const targetEnuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(targetPlayerWorldPos);
+            const targetEnuTransform = Cesium.Transforms.eastNorthUpToFixedFrame(targetPlayerWorldPos);
 
-        // Create the player reference point at eye level
-        const playerReferencePoint = Cesium.Matrix4.multiplyByPoint(
-            targetEnuTransform,
-            new Cesium.Cartesian3(0, 0, this.playerReferenceHeight),
-            new Cesium.Cartesian3()
-        );
+            // Create the player reference point at eye level
+            const playerReferencePoint = Cesium.Matrix4.multiplyByPoint(
+                targetEnuTransform,
+                new Cesium.Cartesian3(0, 0, this.playerReferenceHeight),
+                new Cesium.Cartesian3()
+            );
 
-        const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
-        const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
-        const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
-        const offsetY = horizontalDistance * Math.cos(this.cameraHeading);
-        const offsetZ = verticalDistance;
-        const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
+            const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
+            const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
+            const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
+            const offsetY = horizontalDistance * Math.cos(this.cameraHeading);
+            const offsetZ = verticalDistance;
+            const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
-        const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
-            targetEnuTransform,
-            cameraOffsetENU,
-            new Cesium.Cartesian3()
-        );
+            const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
+                targetEnuTransform,
+                cameraOffsetENU,
+                new Cesium.Cartesian3()
+            );
 
-        const finalCameraPos = Cesium.Cartesian3.add(
-            targetPlayerWorldPos,
-            cameraOffsetECEF,
-            new Cesium.Cartesian3()
-        );
+            const finalCameraPos = Cesium.Cartesian3.add(
+                targetPlayerWorldPos,
+                cameraOffsetECEF,
+                new Cesium.Cartesian3()
+            );
 
-        // Direct the camera to look at the player's reference point
-        const finalDirection = Cesium.Cartesian3.subtract(
-            playerReferencePoint,
-            finalCameraPos,
-            new Cesium.Cartesian3()
-        );
-        Cesium.Cartesian3.normalize(finalDirection, finalDirection);
+            // Direct the camera to look at the player's reference point
+            const finalDirection = Cesium.Cartesian3.subtract(
+                playerReferencePoint,
+                finalCameraPos,
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(finalDirection, finalDirection);
 
-        const finalUp = Cesium.Matrix4.multiplyByPointAsVector(
-            targetEnuTransform,
-            new Cesium.Cartesian3(0, 0, 1),
-            new Cesium.Cartesian3()
-        );
-        Cesium.Cartesian3.normalize(finalUp, finalUp);
+            const finalUp = Cesium.Matrix4.multiplyByPointAsVector(
+                targetEnuTransform,
+                new Cesium.Cartesian3(0, 0, 1),
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(finalUp, finalUp);
 
-        this.cesiumCamera.position = finalCameraPos;
-        this.cesiumCamera.direction = finalDirection;
-        this.cesiumCamera.up = finalUp;
-        this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
-        Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
-        this.syncThreeCamera();
+            this.cesiumCamera.position = finalCameraPos;
+            this.cesiumCamera.direction = finalDirection;
+            this.cesiumCamera.up = finalUp;
+            this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
+            Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+            this.syncThreeCamera();
+            
+            resolve();
+        });
+    }
+    
+    /**
+     * Sets the space flight animation system
+     * @param {Object} spaceFlightAnimation - Space flight animation instance
+     */
+    setSpaceFlightAnimation(spaceFlightAnimation) {
+        this.spaceFlightAnimation = spaceFlightAnimation;
+    }
+    
+    /**
+     * Sets the animation state
+     * @param {boolean} isAnimating - Whether animation is in progress
+     */
+    setAnimatingState(isAnimating) {
+        this.isAnimating = isAnimating;
     }
 }

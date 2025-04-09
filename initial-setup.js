@@ -181,12 +181,13 @@ export function getDirection(headingRad) {
  * @param {Object} terrainManager - Terrain manager instance
  * @param {HTMLElement} instructionsElement - Element to display instructions
  * @param {Object} fallStateRef - Reference to the dramatic fall state variables
+ * @param {Object} spaceFlightAnimation - Space flight animation instance (optional)
  */
 export function setupInputListeners(
     inputState, playerPosition, verticalVelocityRef, playerHeadingRef,
     updateDirectionVectorsFunc, forwardDirection, rightDirection,
     citiesData, cesiumViewer, miniMapInstance, cameraSystemInstance,
-    terrainManager, instructionsElement, fallStateRef
+    terrainManager, instructionsElement, fallStateRef, spaceFlightAnimation
 ) {
     // NOTE: citiesData is now the 'cities' constant defined in this file
     // groundHeight and DRAMATIC_FALL_HEIGHT are also defined in this file
@@ -196,6 +197,12 @@ export function setupInputListeners(
     document.addEventListener('keydown', (event) => {
         const key = event.key.toUpperCase();
         let handled = true; // Flag to prevent default browser actions like scrolling
+        event.preventDefault();
+
+        if (spaceFlightAnimation && spaceFlightAnimation.isAnimating) {
+            return;
+        }
+        
         switch (key) {
             case 'W': inputState.forward = true; break;
             case 'S': inputState.backward = true; break;
@@ -214,6 +221,12 @@ export function setupInputListeners(
 
     document.addEventListener('keyup', (event) => {
         const key = event.key.toUpperCase();
+        
+        // If space flight animation is active, skip input handling
+        if (spaceFlightAnimation && spaceFlightAnimation.isAnimating) {
+            return;
+        }
+        
         switch (key) {
             case 'W': inputState.forward = false; break;
             case 'S': inputState.backward = false; break;
@@ -237,7 +250,7 @@ export function setupInputListeners(
 
             // Update UI to show loading state
             if (instructionsElement) {
-                instructionsElement.innerHTML = `Loading ${selectedCity}...`;
+                instructionsElement.innerHTML = `Loading ${cities[selectedCity].displayName}...`;
                 instructionsElement.classList.add('loading');
             }
 
@@ -255,8 +268,61 @@ export function setupInputListeners(
                     console.warn("No terrain manager available, using default ground height");
                     terrainHeight = groundHeight; // Use constant from this file
                 }
+                
+                // Store current position for animation
+                const startPosition = {
+                    longitude: playerPosition.longitude,
+                    latitude: playerPosition.latitude,
+                    height: playerPosition.height
+                };
+                
+                // Prepare target position
+                const targetPosition = {
+                    longitude: Cesium.Math.toRadians(cityCoords.longitude),
+                    latitude: Cesium.Math.toRadians(cityCoords.latitude),
+                    height: DRAMATIC_FALL_HEIGHT // Use constant from this file
+                };
+                
+                // If space flight animation is available, use it
+                if (spaceFlightAnimation) {
+                    console.log("Using space flight animation for city change");
+                    
+                    // Set camera system as animating
+                    if (cameraSystemInstance) {
+                        cameraSystemInstance.setAnimatingState(true);
+                    }
+                    
+                    // Start the animation
+                    spaceFlightAnimation.startAnimation(
+                        startPosition,
+                        targetPosition,
+                        playerHeadingRef,
+                        updateDirectionVectorsFunc,
+                        forwardDirection,
+                        rightDirection,
+                        fallStateRef,
+                        verticalVelocityRef,
+                        () => {
+                            // Animation complete callback
+                            console.log("Space flight animation complete");
+                            
+                            // Update player position at animation end
+                            playerPosition.longitude = targetPosition.longitude;
+                            playerPosition.latitude = targetPosition.latitude;
+                            playerPosition.height = targetPosition.height;
+                            
+                            // Reset animation state in camera system
+                            if (cameraSystemInstance) {
+                                cameraSystemInstance.setAnimatingState(false);
+                            }
+                        }
+                    );
+                    
+                    // Return early as animation will handle the transition
+                    return;
+                }
             
-                // Reset player state
+                // Standard teleportation (fallback if animation unavailable)
                 playerPosition.longitude = Cesium.Math.toRadians(cityCoords.longitude);
                 playerPosition.latitude = Cesium.Math.toRadians(cityCoords.latitude);
             
@@ -284,7 +350,7 @@ export function setupInputListeners(
                 // Update UI
                 if (instructionsElement) {
                     instructionsElement.classList.remove('loading');
-                    instructionsElement.innerHTML = `Teleporting to ${selectedCity}... Use WASD to move and Arrow keys to look around while falling!`;
+                    instructionsElement.innerHTML = `Teleporting to ${cities[selectedCity].displayName}... Use WASD to move and Arrow keys to look around while falling!`;
                 }
             
                 // Use camera system for teleportation - modified to look down more
@@ -297,7 +363,7 @@ export function setupInputListeners(
                     );
                     console.log("Teleportation complete, dramatic fall active with player control");
                     if (instructionsElement) {
-                        instructionsElement.innerHTML = `Skydiving into ${selectedCity}... Use WASD to move and Arrow keys to look!`;
+                        instructionsElement.innerHTML = `Skydiving into ${cities[selectedCity].displayName}... Use WASD to move and Arrow keys to look!`;
                     }
                 } else {
                     console.error("Camera System not available for teleport.");
@@ -308,7 +374,7 @@ export function setupInputListeners(
                         destination: targetWorldPos,
                         orientation: {
                             heading: playerHeadingRef.value,
-                            pitch: Cesium.Math.toRadians(-30.0),
+                            pitch: Cesium.Math.toRadians(45),
                             roll: 0.0
                         },
                         duration: 0.0
@@ -323,7 +389,7 @@ export function setupInputListeners(
                 verticalVelocityRef.value = 0;
                 if (instructionsElement) {
                     instructionsElement.classList.remove('loading');
-                    instructionsElement.innerHTML = `Error loading ${selectedCity}. Using default elevation.`;
+                    instructionsElement.innerHTML = `Error loading ${cities[selectedCity].displayName}. Using default elevation.`;
                     setTimeout(() => {
                         instructionsElement.innerHTML = `W/S: Move | A/D: Strafe | Arrows: Look | Space: Jump`;
                     }, 3000);
@@ -335,10 +401,6 @@ export function setupInputListeners(
         }
     });
 }
-// --- End Functions ---
-
-
-// --- Original initial-setup.js content starts here ---
 
 // Performance Settings
 const tilesMaximumScreenSpaceError = 50; // This is defined above now, keep one definition
