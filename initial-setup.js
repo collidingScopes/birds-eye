@@ -13,30 +13,89 @@ export const DRAMATIC_FALL_HEIGHT = 2500;
 
 // City Coordinates
 export const cities = {
-    nyc: { longitude: -73.9854, latitude: 40.7580 },
-    london: { longitude: -0.1276, latitude: 51.5074 },
-    tokyo: { longitude: 139.6917, latitude: 35.6895 },
-    paris: { longitude: 2.3522, latitude: 48.8566 },
-    sydney: { longitude: 151.2093, latitude: -33.8688 },
-    montreal: { longitude: -73.5674, latitude: 45.5019 },
-    toronto: { longitude: -79.3832, latitude: 43.6532 },
-    istanbul: { longitude: 28.9784, latitude: 41.0082 },
-    hanoi: { longitude: 105.8342, latitude: 21.0278 },
-    hongkong: { longitude: 114.1694, latitude: 22.3193 },
-    seoul: { longitude: 126.9780, latitude: 37.5665 },
-    shanghai: { longitude: 121.4737, latitude: 31.2304 },
-    sanfrancisco: { longitude: -122.4194, latitude: 37.7749 },
-    berlin: { longitude: 13.4050, latitude: 52.5200 },
-    riodejaneiro: { longitude: -43.1729, latitude: -22.9068 },
-    chicago: { longitude: -87.6298, latitude: 41.8781 },
-    dubai: { longitude: 55.2708, latitude: 25.2048 },
-    kualalumpur: { longitude: 101.6869, latitude: 3.1390 },
-    singapore: { longitude: 103.8198, latitude: 1.3521 },
+    nyc: { longitude: -73.9854, latitude: 40.7580, displayName: 'NYC' },
+    london: { longitude: -0.1276, latitude: 51.5074, displayName: 'London' },
+    tokyo: { longitude: 139.6917, latitude: 35.6895, displayName: 'Tokyo' },
+    paris: { longitude: 2.3522, latitude: 48.8566, displayName: 'Paris' },
+    sydney: { longitude: 151.2093, latitude: -33.8688, displayName: 'Sydney' },
+    montreal: { longitude: -73.5674, latitude: 45.5019, displayName: 'Montreal' },
+    toronto: { longitude: -79.3832, latitude: 43.6532, displayName: 'Toronto' },
+    istanbul: { longitude: 28.9784, latitude: 41.0082, displayName: 'Istanbul' },
+    hanoi: { longitude: 105.8342, latitude: 21.0278, displayName: 'Hanoi' },
+    hongkong: { longitude: 114.1694, latitude: 22.3193, displayName: 'Hong Kong' },
+    seoul: { longitude: 126.9780, latitude: 37.5665, displayName: 'Seoul' },
+    shanghai: { longitude: 121.4737, latitude: 31.2304, displayName: 'Shanghai' },
+    sanfrancisco: { longitude: -122.4194, latitude: 37.7749, displayName: 'San Francisco' },
+    berlin: { longitude: 13.4050, latitude: 52.5200, displayName: 'Berlin' },
+    riodejaneiro: { longitude: -43.1729, latitude: -22.9068, displayName: 'Rio de Janeiro' },
+    chicago: { longitude: -87.6298, latitude: 41.8781, displayName: 'Chicago' },
+    dubai: { longitude: 55.2708, latitude: 25.2048, displayName: 'Dubai' },
+    kualalumpur: { longitude: 101.6869, latitude: 3.1390, displayName: 'Kuala Lumpur' },
+    singapore: { longitude: 103.8198, latitude: 1.3521, displayName: 'Singapore' },
+    venice: { longitude: 12.3155, latitude: 45.4408, displayName: 'Venice' },
+    dubrovnik: { longitude: 18.0944, latitude: 42.6507, displayName: 'Dubrovnik' },
+    amsterdam: { longitude: 4.9041, latitude: 52.3676, displayName: 'Amsterdam' },
+    barcelona: { longitude: 2.1734, latitude: 41.3851, displayName: 'Barcelona' },
+    rome: { longitude: 12.4964, latitude: 41.9028, displayName: 'Rome' },
+    athens: { longitude: 23.7275, latitude: 37.9838, displayName: 'Athens' },
+    bangkok: { longitude: 100.5018, latitude: 13.7563, displayName: 'Bangkok' },
+    cairo: { longitude: 31.2357, latitude: 30.0444, displayName: 'Cairo' },
+    capetown: { longitude: 18.4241, latitude: -33.9249, displayName: 'Cape Town' },
+    mexicocity: { longitude: -99.1332, latitude: 19.4326, displayName: 'Mexico City' },
+    moscow: { longitude: 37.6173, latitude: 55.7558, displayName: 'Moscow' },
+    mumbai: { longitude: 72.8777, latitude: 19.0760, displayName: 'Mumbai' },
+    oslo: { longitude: 10.7522, latitude: 59.9139, displayName: 'Oslo' },
+    prague: { longitude: 14.4378, latitude: 50.0755, displayName: 'Prague' },
+    saopaulo: { longitude: -46.6333, latitude: -23.5505, displayName: 'São Paulo' },
+    seattle: { longitude: -122.3321, latitude: 47.6062, displayName: 'Seattle' },
+    stockholm: { longitude: 18.0686, latitude: 59.3293, displayName: 'Stockholm' },
+    sydney: { longitude: 151.2093, latitude: -33.8688, displayName: 'Sydney' },
+    taipei: { longitude: 121.5654, latitude: 25.0330, displayName: 'Taipei' },
+    vienna: { longitude: 16.3738, latitude: 48.2082, displayName: 'Vienna' },
+    zurich: { longitude: 8.5417, latitude: 47.3769, displayName: 'Zurich' },
+    losangeles: { longitude: -118.2437, latitude: 34.0522, displayName: 'Los Angeles' },
+    miami: { longitude: -80.1918, latitude: 25.7617, displayName: 'Miami' },
+    lasvegas: { longitude: -115.1398, latitude: 36.1699, displayName: 'Las Vegas' },
+    neworleans: { longitude: -90.0715, latitude: 29.9511, displayName: 'New Orleans' },
+    kyoto: { longitude: 135.7681, latitude: 35.0116, displayName: 'Kyoto' },
+    buenosaires: { longitude: -58.3816, latitude: -34.6037, displayName: 'Buenos Aires' },
+    marrakech: { longitude: -8.0083, latitude: 31.6295, displayName: 'Marrakech' },
+    santorini: { longitude: 25.4615, latitude: 36.3932, displayName: 'Santorini' }
 };
+
 // --- End Constants ---
 
-
-// --- Functions previously in helper-functions.js ---
+/**
+ * Populates the city selector dropdown with cities sorted alphabetically
+ * @param {Object} cities - Object containing city coordinates
+ */
+export function populateCitySelector(cities) {
+    const citySelector = document.getElementById('citySelector');
+    
+    if (!citySelector) {
+        console.error("City selector element not found");
+        return;
+    }
+    
+    // Clear any existing options
+    citySelector.innerHTML = '';
+    
+    // Get city entries and sort them alphabetically by display name
+    const cityEntries = Object.entries(cities).sort((a, b) => {
+        return a[1].displayName.localeCompare(b[1].displayName);
+    });
+    
+    // Add options to the selector
+    cityEntries.forEach(([cityKey, cityData]) => {
+        const option = document.createElement('option');
+        option.value = cityKey;
+        option.textContent = cityData.displayName;
+        citySelector.appendChild(option);
+    });
+    
+    // Set NYC as default selection
+    citySelector.value = 'nyc';
+}
 
 /**
  * Updates the forwardDirection and rightDirection vectors based on the current playerHeading.

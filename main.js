@@ -11,6 +11,7 @@ import {
     gravity,
     groundHeight,
     cities,
+    populateCitySelector,
     DRAMATIC_FALL_HEIGHT // Import the fall height constant
 } from './initial-setup.js';
 import { checkBuildingCollision } from './building-collision.js';
@@ -107,6 +108,9 @@ let needsRender = true;
 async function initialize() {
     console.log("Starting initialization sequence...");
 
+    populateCitySelector(cities);
+    console.log("City selector populated");
+    
     three = await initThree(); // initThree is imported from initial-setup.js
     console.log("Three.js initialized");
 

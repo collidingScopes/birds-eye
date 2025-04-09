@@ -184,7 +184,7 @@ export class ShaderSpeedEffect {
                             // OPTIMIZATION: Simplified stream calculations
                             float streamLength = 0.15 + 0.8 * intensity;
                             // INCREASED THICKNESS for more visible lines
-                            float thickness = 0.003 * intensity;
+                            float thickness = 0.002 * intensity;
                             
                             // Start and end positions
                             vec2 streamStart = mix(center, pos, t);
