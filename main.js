@@ -104,7 +104,6 @@ let buildingColorManager = null;
 let lastTime = 0;
 const renderInterval = 1000 / 60; // Target 60 FPS
 let lastRenderTime = 0;
-let needsRender = true;
 
 // --- Initialization Sequence ---
 async function initialize() {
@@ -152,7 +151,8 @@ async function initialize() {
 
     cameraSystem = new CameraSystem(cesiumCamera, three.camera);
     console.log("Camera system initialized");
-    
+    createCameraToggleUI();
+
     // Create the space flight animation system
     const spaceFlightAnimation = new SpaceFlightAnimation(
         viewer,
@@ -327,12 +327,25 @@ function update(currentTime) {
     const isJumping = inputState.jump;
     // Use groundHeight imported from initial-setup.js
     const physicsActive = verticalVelocity !== 0 || (playerPosition && playerPosition.height > groundHeight + 0.1);
-
-    if (fallStateRef.isInInitialFall) {
-        needsRender = true;
+    
+    const isFirstPersonMode = cameraSystem.getIsFPSMode();
+    if (isFirstPersonMode) {
+        // Use our player model tracking state to check if the model is still in the scene
+        const playerModelInScene = three.scene.children.includes(three.playerMesh);
+        
+        // Only hide if we haven't already hidden it
+        if (playerModelInScene) {
+            hidePlayerModel(); // Always use the full function for consistency
+        }
+    } else if (!isFirstPersonMode) {
+        // Always check if the model needs to be shown when in third-person
+        const playerModelInScene = three.scene.children.includes(three.playerMesh);
+        if (!playerModelInScene) {
+            showPlayerModel();
+        }
     }
 
-    if (!isMoving && !isTurning && !isPitching && !isJumping && !physicsActive && !needsRender && (currentTime - lastRenderTime < renderInterval)) {
+    if (!isMoving && !isTurning && !isPitching && !isJumping && !physicsActive && (currentTime - lastRenderTime < renderInterval)) {
         if (viewer.scene.primitives.length > 0) {
             viewer.render();
             if (three.renderer && three.scene && three.camera) {
@@ -342,13 +355,11 @@ function update(currentTime) {
         return;
     }
     lastRenderTime = currentTime;
-    needsRender = false;
 
     // MODIFICATION: Allow camera controls during fall
     // Remove the conditional block and allow camera controls at all times
     const cameraControlResult = cameraSystem.updateControls(inputState, deltaTime, cameraTurnSpeed);
     if (cameraControlResult.changed) {
-        needsRender = true;
         playerHeading = (cameraSystem.getHeading() + Math.PI) % (2.0 * Math.PI);
         // Use updateDirectionVectors imported from initial-setup.js
         updateDirectionVectors(playerHeading, forwardDirection, rightDirection);
@@ -378,7 +389,6 @@ function update(currentTime) {
             // Use jumpVelocity imported from initial-setup.js
             verticalVelocity = jumpVelocity;
             playerPosition.height += 0.1;
-            needsRender = true;
             inputState.jump = false;
 
             // ADD THIS CODE:
@@ -412,8 +422,6 @@ function update(currentTime) {
             verticalVelocity = 0;
         }
     }
-
-    needsRender = true;
 
     // Calculate acceleration/deceleration
     if (isMoving) {
@@ -464,7 +472,6 @@ function update(currentTime) {
     }
 
     if (movedHorizontally) {
-        needsRender = true;
         const magnitude = Math.sqrt(deltaEast * deltaEast + deltaNorth * deltaNorth);
         let normalizedEast = 0;
         let normalizedNorth = 0;
@@ -503,7 +510,7 @@ function update(currentTime) {
         }
     }
 
-    if (movedHorizontally || needsRender) {
+    if (movedHorizontally) {
         if (FrustumCuller && FrustumCuller.initialized) {
             FrustumCuller.update();
         }
@@ -515,18 +522,7 @@ function update(currentTime) {
         forwardDirection
     );
 
-    if (three.playerMesh) {
-        const cameraPitch = cameraSystem.getPitch();
-
-        /*
-        console.log("Player heading: "+playerHeading);
-        console.log("Camera pitch: "+cameraPitch);
-        console.log("Player z rotation: "+three.playerMesh.rotation.z);
-        console.log("Player x rotation: "+three.playerMesh.rotation.x);
-        console.log("Player y rotation: "+three.playerMesh.rotation.y);
-        console.log("Player y position: "+three.playerMesh.position.y);
-        */
-       
+    if (three.playerMesh) {       
         three.playerMesh.rotation.y = Math.PI - playerHeading;
         three.playerMesh.rotation.x = Math.PI/2;
 
@@ -535,23 +531,6 @@ function update(currentTime) {
         }
 
         three.playerMesh.rotation.z = -normalizeAngle(playerHeading);
-
-        /*
-        if(cameraPitch > 0){
-            three.playerMesh.rotation.z = -normalizeAngle(playerHeading);
-        } else {
-             if(playerHeading>=Math.PI){
-                three.playerMesh.rotation.z = -Math.PI*1.5;
-            } else if(playerHeading>=0){
-                three.playerMesh.rotation.z = -Math.PI/2;
-            } else if (playerHeading>=-Math.PI){
-                three.playerMesh.rotation.z = Math.PI/2;
-            } else {
-                three.playerMesh.rotation.z = Math.PI;
-            }
-        }
-        three.playerMesh.position.set(0, 0, 0);
-        */
 
         if (three.animationSystem) {
             three.animationSystem.updatePlayerAnimation(inputState, onSurface, verticalVelocity);
@@ -599,6 +578,154 @@ function update(currentTime) {
     }
 }
 
+// Create UI for camera toggle
+function createCameraToggleUI() {
+    // Create UI container for camera toggle
+    const cameraToggleDiv = document.createElement('div');
+    cameraToggleDiv.id = 'cameraToggle';
+    cameraToggleDiv.className = 'camera-toggle-controls';
+    cameraToggleDiv.innerHTML = `
+        <button id="toggleCamera" class="camera-button">Switch to First-Person (V)</button>
+    `;
+    document.body.appendChild(cameraToggleDiv);
+
+    // Set up event listeners for the toggle button
+    setupCameraToggleListeners();
+}
+
+// Set up event listeners for camera toggle
+function setupCameraToggleListeners() {
+    const toggleButton = document.getElementById('toggleCamera');
+    
+    if (!toggleButton) {
+        console.error("Camera toggle button not found");
+        return;
+    }
+    
+    // Handle button click
+    toggleButton.addEventListener('click', toggleCameraView);
+    
+    // Handle keyboard shortcut (V key)
+    document.addEventListener('keydown', (event) => {
+        if (event.key.toUpperCase() === 'V') {
+            toggleCameraView();
+            event.preventDefault();
+        }
+    });
+    
+    // Initial button state
+    updateCameraToggleButton();
+}
+
+// Function to toggle camera view
+function toggleCameraView() {
+    if (!cameraSystem) return;
+    
+    // Toggle the camera mode
+    const isFirstPerson = cameraSystem.toggleCameraMode(three.playerMesh);
+    console.log("Camera view changed; first-person view: " + isFirstPerson);
+    
+    // Explicitly handle model visibility
+    if (isFirstPerson) {
+        // When switching to first-person, hide the model immediately
+        hidePlayerModel();
+    } else {
+        // When switching to third-person, show the model immediately
+        showPlayerModel();
+    }
+
+    // If we're currently rendering the scene, do an immediate render
+    if (viewer && three.renderer && three.scene && three.camera) {
+        viewer.render();
+        three.renderer.render(three.scene, three.camera);
+    }
+
+    // Update instructions to reflect new camera mode
+    updateCameraToggleButton();    
+    updateCameraInstructions(isFirstPerson);
+}
+
+// Update button text and style based on current camera mode
+function updateCameraToggleButton() {
+    const toggleButton = document.getElementById('toggleCamera');
+    if (!toggleButton) return;
+    
+    const isFirstPerson = cameraSystem.getIsFPSMode();
+    
+    if (isFirstPerson) {
+        toggleButton.textContent = 'Switch to Third-Person (V)';
+        toggleButton.classList.add('active');
+    } else {
+        toggleButton.textContent = 'Switch to First-Person (V)';
+        toggleButton.classList.remove('active');
+    }
+}
+
+// Update instructions to include camera mode info
+function updateCameraInstructions(isFirstPerson) {
+    if (!instructionsElement) return;
+    
+    const currentText = instructionsElement.innerHTML;
+    
+    if (isFirstPerson) {
+        if (!currentText.includes("First-Person Mode")) {
+            instructionsElement.innerHTML = currentText + " | First-Person Mode";
+        }
+    } else {
+        instructionsElement.innerHTML = currentText.replace(" | First-Person Mode", "");
+    }
+}
+
+function hidePlayerModel() {
+    if (!three.playerMesh) return;
+    
+    // Store original position before removing (to restore later)
+    if (!three.playerMesh._originalPosition) {
+        three.playerMesh._originalPosition = {
+            x: three.playerMesh.position.x,
+            y: three.playerMesh.position.y,
+            z: three.playerMesh.position.z
+        };
+    }
+    
+    // The most reliable way to hide the model is to remove it from the scene
+    if (three.scene.children.includes(three.playerMesh)) {
+        three.scene.remove(three.playerMesh);
+        console.log("Player model removed from scene");
+    }
+}
+
+function showPlayerModel() {
+    if (!three.playerMesh) return;
+    
+    // Only add back if it's not already in the scene
+    if (!three.scene.children.includes(three.playerMesh)) {
+        three.scene.add(three.playerMesh);
+        
+        // Restore original position if we saved it
+        if (three.playerMesh._originalPosition) {
+            three.playerMesh.position.set(
+                three.playerMesh._originalPosition.x,
+                three.playerMesh._originalPosition.y,
+                three.playerMesh._originalPosition.z
+            );
+        } else {
+            // Default position if original wasn't saved
+            three.playerMesh.position.set(0, 0, 0);
+        }
+        
+        // Ensure it's visible
+        three.playerMesh.visible = true;
+        
+        // Make all children visible
+        three.playerMesh.traverse(function(child) {
+            child.visible = true;
+        });
+        
+        console.log("Player model added back to scene");
+    }
+}
+
 window.addEventListener('resize', () => {
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -619,7 +746,6 @@ window.addEventListener('resize', () => {
         speedEffect.handleResize();
     }
 
-    needsRender = true;
 });
 
 initialize();

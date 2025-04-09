@@ -49,3 +49,5 @@ Different challenges in each city
 Add billboards or spotlights in cities showing key attractions
 
 Night mode
+
+First person vs. third-person mode toggle

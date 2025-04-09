@@ -119,7 +119,7 @@ export class JumpBoostEffect {
             // Position the ring at the player's current position, slightly below
             const ringPosition = new THREE.Vector3(
                 playerPosition.x || 0,
-                (playerPosition.y || 0) - 0.1, // Slightly below player
+                (playerPosition.y || 0) - 0.5, // Slightly below player
                 playerPosition.z || 0
             );
             ring.mesh.position.copy(ringPosition);

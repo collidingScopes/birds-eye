@@ -163,3 +163,27 @@ html, body {
 .hidden {
     display: none !important;
 }
+
+.camera-toggle-controls {
+    position: absolute;
+    bottom: 68px;
+    right: 5px;
+    z-index: 1000;
+}
+.camera-button {
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+.camera-button:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+.camera-button.active {
+    background: rgba(30, 144, 255, 0.6);
+}

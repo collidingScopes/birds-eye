@@ -1,6 +1,6 @@
 /**
- * CameraSystem class - FIXED
- * Manages camera positioning, orientation, and controls for third-person view
+ * CameraSystem class
+ * Manages camera positioning, orientation, and controls for both first-person and third-person views
  */
 export class CameraSystem {
     /**
@@ -26,6 +26,14 @@ export class CameraSystem {
         
         // Animation state
         this.isAnimating = false;
+        
+        // First-person camera settings
+        this.isFirstPerson = false; // Default to third-person view
+        this.firstPersonHeight = 1.7; // Height offset for first-person camera (eye level)
+        this.firstPersonForwardOffset = 0.5; // Small forward offset to avoid seeing player model
+        
+        // Store reference to player mesh
+        this.playerMesh = null;
     }
 
     /**
@@ -35,6 +43,8 @@ export class CameraSystem {
      * @param {Object} forwardDirection - Normalized forward direction vector
      */
     update(playerPosition, playerHeading, forwardDirection) {
+        // Store the player heading for use in setting camera direction
+        this.playerHeading = playerHeading;
         // Skip normal updates if an animation is in progress
         if (this.isAnimating) return;
         
@@ -55,55 +65,105 @@ export class CameraSystem {
             new Cesium.Cartesian3()
         );
 
-        // 3. Calculate camera offset in local ENU frame
-        // Use spherical coordinates to position the camera at a fixed distance
-        const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
-        const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
+        if (this.isFirstPerson) {
+            // First-person camera positioning
+            // Place camera at player eye level
+            const fpsCameraPos = Cesium.Matrix4.multiplyByPoint(
+                enuTransform,
+                // Add a small forward offset to avoid seeing the player model
+                new Cesium.Cartesian3(
+                    this.firstPersonForwardOffset * Math.sin(this.playerHeading),
+                    this.firstPersonForwardOffset * Math.cos(this.playerHeading),
+                    this.firstPersonHeight
+                ),
+                new Cesium.Cartesian3()
+            );
+            
+            this.cesiumCamera.position = fpsCameraPos;
+            
+            // In first-person mode, we need to use playerHeading (not cameraHeading)
+            // This is because in third-person, cameraHeading points AT the player
+            // While in first-person, we want to look in the direction the player faces
+            const fpsDirENU = new Cesium.Cartesian3(
+                Math.sin(this.playerHeading),
+                Math.cos(this.playerHeading),
+                Math.sin(this.cameraPitch)
+            );
+            
+            const fpsDirection = Cesium.Matrix4.multiplyByPointAsVector(
+                enuTransform,
+                fpsDirENU,
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(fpsDirection, fpsDirection);
+            
+            const upVector = Cesium.Matrix4.multiplyByPointAsVector(
+                enuTransform,
+                new Cesium.Cartesian3(0, 0, 1),
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(upVector, upVector);
+            
+            this.cesiumCamera.direction = fpsDirection;
+            this.cesiumCamera.up = upVector;
+            this.cesiumCamera.right = Cesium.Cartesian3.cross(
+                fpsDirection,
+                upVector,
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+        } else {
+            // Original third-person camera positioning code
+            // 3. Calculate camera offset in local ENU frame
+            // Use spherical coordinates to position the camera at a fixed distance
+            const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
+            const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
 
-        const offsetX = horizontalDistance * Math.sin(this.cameraHeading); // East
-        const offsetY = horizontalDistance * Math.cos(this.cameraHeading); // North
-        const offsetZ = verticalDistance; // Up - relative to player reference height
+            const offsetX = horizontalDistance * Math.sin(this.cameraHeading); // East
+            const offsetY = horizontalDistance * Math.cos(this.cameraHeading); // North
+            const offsetZ = verticalDistance; // Up - relative to player reference height
 
-        const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
+            const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
-        // 4. Transform offset to world coordinates
-        const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
-            enuTransform,
-            cameraOffsetENU,
-            new Cesium.Cartesian3()
-        );
+            // 4. Transform offset to world coordinates
+            const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
+                enuTransform,
+                cameraOffsetENU,
+                new Cesium.Cartesian3()
+            );
 
-        // 5. Set camera position
-        const cameraWorldPos = Cesium.Cartesian3.add(
-            playerWorldPos,
-            cameraOffsetECEF,
-            new Cesium.Cartesian3()
-        );
-        this.cesiumCamera.position = cameraWorldPos;
+            // 5. Set camera position
+            const cameraWorldPos = Cesium.Cartesian3.add(
+                playerWorldPos,
+                cameraOffsetECEF,
+                new Cesium.Cartesian3()
+            );
+            this.cesiumCamera.position = cameraWorldPos;
 
-        // 6. Orient camera to look at player's reference point (not ground position)
-        const directionToPlayer = Cesium.Cartesian3.subtract(
-            playerReferencePoint,
-            cameraWorldPos,
-            new Cesium.Cartesian3()
-        );
-        Cesium.Cartesian3.normalize(directionToPlayer, directionToPlayer);
+            // 6. Orient camera to look at player's reference point (not ground position)
+            const directionToPlayer = Cesium.Cartesian3.subtract(
+                playerReferencePoint,
+                cameraWorldPos,
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(directionToPlayer, directionToPlayer);
 
-        const upVector = Cesium.Matrix4.multiplyByPointAsVector(
-            enuTransform,
-            new Cesium.Cartesian3(0, 0, 1),
-            new Cesium.Cartesian3()
-        );
-        Cesium.Cartesian3.normalize(upVector, upVector);
+            const upVector = Cesium.Matrix4.multiplyByPointAsVector(
+                enuTransform,
+                new Cesium.Cartesian3(0, 0, 1),
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(upVector, upVector);
 
-        this.cesiumCamera.direction = directionToPlayer;
-        this.cesiumCamera.up = upVector;
-        this.cesiumCamera.right = Cesium.Cartesian3.cross(
-            directionToPlayer,
-            upVector,
-            new Cesium.Cartesian3()
-        );
-        Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+            this.cesiumCamera.direction = directionToPlayer;
+            this.cesiumCamera.up = upVector;
+            this.cesiumCamera.right = Cesium.Cartesian3.cross(
+                directionToPlayer,
+                upVector,
+                new Cesium.Cartesian3()
+            );
+            Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+        }
 
         // 7. Synchronize Three.js camera
         this.syncThreeCamera();
@@ -128,19 +188,41 @@ export class CameraSystem {
             if (cesiumFrustum.far) this.threeCamera.far = cesiumFrustum.far;
             this.threeCamera.updateProjectionMatrix();
 
-            // Position camera using spherical coordinates to maintain fixed orbital distance
-            // Calculate the proper position in local space using the orbital distance
-            const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
-            const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
+            if (this.isFirstPerson) {
+                // In first-person mode, position camera at origin (player model will be hidden)
+                this.threeCamera.position.set(0, 0, this.firstPersonHeight);
+                
+                // In first-person mode, use player heading for direction
+                // Create vectors using this.threeCamera's constructor to avoid direct THREE reference
+                const lookDir = {
+                    x: Math.sin(this.playerHeading),
+                    y: Math.cos(this.playerHeading),
+                    z: Math.sin(this.cameraPitch)
+                };
+                
+                // Calculate look target point
+                const lookTarget = {
+                    x: this.threeCamera.position.x + lookDir.x,
+                    y: this.threeCamera.position.y + lookDir.y,
+                    z: this.threeCamera.position.z + lookDir.z
+                };
+                
+                this.threeCamera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
+            } else {
+                // Original third-person camera positioning
+                // Position camera using spherical coordinates to maintain fixed orbital distance
+                const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
+                const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
 
-            this.threeCamera.position.set(
-                horizontalDistance * Math.sin(this.cameraHeading),
-                horizontalDistance * Math.cos(this.cameraHeading),
-                verticalDistance
-            );
-            
-            // Look at the player's reference point, not the origin
-            this.threeCamera.lookAt(0, 0, this.playerReferenceHeight);
+                this.threeCamera.position.set(
+                    horizontalDistance * Math.sin(this.cameraHeading),
+                    horizontalDistance * Math.cos(this.cameraHeading),
+                    verticalDistance
+                );
+                
+                // Look at the player's reference point, not the origin
+                this.threeCamera.lookAt(0, 0, this.playerReferenceHeight);
+            }
         }
     }
 
@@ -170,13 +252,27 @@ export class CameraSystem {
             this.cameraHeading = ((this.cameraHeading % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
         }
 
-        if (inputState.up) {
-            this.cameraPitch -= turnSpeed * deltaTime * 0.7;
-            changed = true;
-        }
-        if (inputState.down) {
-            this.cameraPitch += turnSpeed * deltaTime * 0.7;
-            changed = true;
+        // Handle pitch differently based on camera mode
+        if (this.isFirstPerson) {
+            // First-person mode: up = look up, down = look down (inverse of third-person)
+            if (inputState.up) {
+                this.cameraPitch += turnSpeed * deltaTime * 0.7;
+                changed = true;
+            }
+            if (inputState.down) {
+                this.cameraPitch -= turnSpeed * deltaTime * 0.7;
+                changed = true;
+            }
+        } else {
+            // Third-person mode: keep existing behavior
+            if (inputState.up) {
+                this.cameraPitch -= turnSpeed * deltaTime * 0.7;
+                changed = true;
+            }
+            if (inputState.down) {
+                this.cameraPitch += turnSpeed * deltaTime * 0.7;
+                changed = true;
+            }
         }
 
         if (changed) {
@@ -204,6 +300,42 @@ export class CameraSystem {
      */
     getPitch() {
         return this.cameraPitch;
+    }
+
+    /**
+     * Toggles between first-person and third-person camera views
+     * @param {Object} playerMesh - The player mesh object (optional)
+     * @returns {boolean} New camera mode (true = first-person, false = third-person)
+     */
+    toggleCameraMode(playerMesh = null) {
+        const previousMode = this.isFirstPerson;
+        this.isFirstPerson = !this.isFirstPerson;
+        
+        // When switching between modes, adjust the pitch to maintain the same view direction
+        if (previousMode === false && this.isFirstPerson === true) {
+            // Switching from third-person to first-person
+            // Invert the pitch to maintain the same vertical viewing direction
+            this.cameraPitch = -this.cameraPitch;
+        } else if (previousMode === true && this.isFirstPerson === false) {
+            // Switching from first-person to third-person
+            // Invert the pitch again when switching back
+            this.cameraPitch = -this.cameraPitch;
+        }
+        
+        // Store the player mesh if provided
+        if (playerMesh) {
+            this.playerMesh = playerMesh;
+        }
+        
+        return this.isFirstPerson;
+    }
+
+    /**
+     * Gets the current camera mode
+     * @returns {boolean} Current camera mode (true = first-person, false = third-person)
+     */
+    getIsFPSMode() {
+        return this.isFirstPerson;
     }
 
     /**
@@ -256,45 +388,93 @@ export class CameraSystem {
                 new Cesium.Cartesian3()
             );
 
-            const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
-            const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
-            const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
-            const offsetY = horizontalDistance * Math.cos(this.cameraHeading);
-            const offsetZ = verticalDistance;
-            const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
+            if (this.isFirstPerson) {
+                // First-person teleport
+                const fpsCameraPos = Cesium.Matrix4.multiplyByPoint(
+                    targetEnuTransform,
+                    new Cesium.Cartesian3(
+                        this.firstPersonForwardOffset * Math.sin(playerHeading),
+                        this.firstPersonForwardOffset * Math.cos(playerHeading),
+                        this.firstPersonHeight
+                    ),
+                    new Cesium.Cartesian3()
+                );
+                
+                // Set camera position for first-person view
+                this.cesiumCamera.position = fpsCameraPos;
+                
+                // Set direction based on player heading and pitch
+                const fpsDirENU = new Cesium.Cartesian3(
+                    Math.sin(playerHeading),
+                    Math.cos(playerHeading),
+                    Math.sin(this.cameraPitch)
+                );
+                
+                const fpsDirection = Cesium.Matrix4.multiplyByPointAsVector(
+                    targetEnuTransform,
+                    fpsDirENU,
+                    new Cesium.Cartesian3()
+                );
+                Cesium.Cartesian3.normalize(fpsDirection, fpsDirection);
+                
+                const upVector = Cesium.Matrix4.multiplyByPointAsVector(
+                    targetEnuTransform,
+                    new Cesium.Cartesian3(0, 0, 1),
+                    new Cesium.Cartesian3()
+                );
+                Cesium.Cartesian3.normalize(upVector, upVector);
+                
+                this.cesiumCamera.direction = fpsDirection;
+                this.cesiumCamera.up = upVector;
+                this.cesiumCamera.right = Cesium.Cartesian3.cross(
+                    fpsDirection,
+                    upVector,
+                    new Cesium.Cartesian3()
+                );
+                Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+            } else {
+                // Original third-person teleport code
+                const horizontalDistance = this.cameraDistance * Math.cos(this.cameraPitch);
+                const verticalDistance = this.cameraDistance * Math.sin(this.cameraPitch);
+                const offsetX = horizontalDistance * Math.sin(this.cameraHeading);
+                const offsetY = horizontalDistance * Math.cos(this.cameraHeading);
+                const offsetZ = verticalDistance;
+                const cameraOffsetENU = new Cesium.Cartesian3(offsetX, offsetY, offsetZ);
 
-            const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
-                targetEnuTransform,
-                cameraOffsetENU,
-                new Cesium.Cartesian3()
-            );
+                const cameraOffsetECEF = Cesium.Matrix4.multiplyByPointAsVector(
+                    targetEnuTransform,
+                    cameraOffsetENU,
+                    new Cesium.Cartesian3()
+                );
 
-            const finalCameraPos = Cesium.Cartesian3.add(
-                targetPlayerWorldPos,
-                cameraOffsetECEF,
-                new Cesium.Cartesian3()
-            );
+                const finalCameraPos = Cesium.Cartesian3.add(
+                    targetPlayerWorldPos,
+                    cameraOffsetECEF,
+                    new Cesium.Cartesian3()
+                );
 
-            // Direct the camera to look at the player's reference point
-            const finalDirection = Cesium.Cartesian3.subtract(
-                playerReferencePoint,
-                finalCameraPos,
-                new Cesium.Cartesian3()
-            );
-            Cesium.Cartesian3.normalize(finalDirection, finalDirection);
+                // Direct the camera to look at the player's reference point
+                const finalDirection = Cesium.Cartesian3.subtract(
+                    playerReferencePoint,
+                    finalCameraPos,
+                    new Cesium.Cartesian3()
+                );
+                Cesium.Cartesian3.normalize(finalDirection, finalDirection);
 
-            const finalUp = Cesium.Matrix4.multiplyByPointAsVector(
-                targetEnuTransform,
-                new Cesium.Cartesian3(0, 0, 1),
-                new Cesium.Cartesian3()
-            );
-            Cesium.Cartesian3.normalize(finalUp, finalUp);
+                const finalUp = Cesium.Matrix4.multiplyByPointAsVector(
+                    targetEnuTransform,
+                    new Cesium.Cartesian3(0, 0, 1),
+                    new Cesium.Cartesian3()
+                );
+                Cesium.Cartesian3.normalize(finalUp, finalUp);
 
-            this.cesiumCamera.position = finalCameraPos;
-            this.cesiumCamera.direction = finalDirection;
-            this.cesiumCamera.up = finalUp;
-            this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
-            Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+                this.cesiumCamera.position = finalCameraPos;
+                this.cesiumCamera.direction = finalDirection;
+                this.cesiumCamera.up = finalUp;
+                this.cesiumCamera.right = Cesium.Cartesian3.cross(finalDirection, finalUp, new Cesium.Cartesian3());
+                Cesium.Cartesian3.normalize(this.cesiumCamera.right, this.cesiumCamera.right);
+            }
+            
             this.syncThreeCamera();
             
             resolve();
